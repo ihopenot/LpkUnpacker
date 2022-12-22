@@ -43,7 +43,33 @@ class LpkLoader():
             return
 
         filename :str = costume["path"]
-        entry_s = self.decrypt_file(filename).decode(encoding="utf8")
+
+        try:
+            entry_s = self.decrypt_file(filename).decode(encoding="utf8")
+        except UnicodeDecodeError:
+            print("tring to auto fix fileId")
+            success = False
+            possible_fileId = []
+            possible_fileId.append(self.config["lpkFile"].strip('.lpk'))
+            for fileid in possible_fileId:
+                self.config["fileId"] = fileid
+                try:
+                    entry_s = self.decrypt_file(filename).decode(encoding="utf8")
+                except UnicodeDecodeError:
+                    continue
+
+                success = True
+                break
+            if not success:
+                print("steam workshop fileid is usually a foler under PATH_TO_YOUR_STEAM/steamapps/workshop/content/616720/([0-9]+)")
+                fileid = input("auto fix failed, please input fileid manually: ")
+                self.config["fileId"] = fileid
+                try:
+                    entry_s = self.decrypt_file(filename).decode(encoding="utf8")
+                except UnicodeDecodeError:
+                    print("decrypt failed")
+                    exit(0)
+
         entry = json.loads(entry_s)
 
         for name, val in travels_dict(entry):
