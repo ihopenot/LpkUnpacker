@@ -39,6 +39,18 @@ def is_encrypted_file(s: str) -> bool:
         return True
     return False
 
+def get_encrypted_file(s: str):
+    if type(s) != str:
+        return None
+    if s.startswith("change_cos"):
+        filename = s[len("change_cos "):]
+    else:
+        filename = s
+    if not is_encrypted_file(filename):
+        return None
+    return filename
+
+
 def travels_dict(dic: dict):
     for k in dic:
         if type(dic[k]) == dict:
