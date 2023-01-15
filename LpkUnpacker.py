@@ -1,21 +1,22 @@
 import sys
+import argparse
 from Core.lpk_loader import *
 from Core.utils import *
 
-if __name__ == "__main__":
-    try:
-        lpkpath = sys.argv[1]
-        outputdir = sys.argv[2]
-        if len(sys.argv) > 3:
-            configpath = sys.argv[3]
-        else:
-            configpath = None
-    except:
-        print(f"usage:\n\t{__file__} target.lpk outputdir [config.json]")
-        exit(0)
-    
-    loader = LpkLoader(lpkpath, configpath)
+parser = argparse.ArgumentParser()
+parser.add_argument("-v", "--verbosity", action="count", default=0, help="increase output verbosity")
+parser.add_argument("-c", "--config", help="config.json")
+parser.add_argument("target_lpk", help="path to lpk file")
+parser.add_argument("output_dir", help="directory to store result")
+loglevels = ["FATAL", "INFO", "DEBUG"]
 
-    if not outputdir.endswith("/"):
-        outputdir = outputdir + "/"
-    loader.extract(outputdir)
+if __name__ == "__main__":
+    args = parser.parse_args()
+
+    verbosity = args.verbosity if args.verbosity < len(loglevels) else len(loglevels) -1
+    loglevel=loglevels[verbosity]
+
+    logging.basicConfig(level=loglevel, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    loader = LpkLoader(args.target_lpk, args.config)
+
+    loader.extract(args.output_dir)
