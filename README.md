@@ -1,3 +1,8 @@
+# LpkUnpacker
+This tool is designed to extract resources from Live2dExViewer's LPK files.
+
+If you encounter any issues while running this program, please consult the '[Issues](https://github.com/ihopenot/LpkUnpacker/issues)' section first.
+
 ## Requirements
 `python -m pip install -r requirements.txt`
 
@@ -18,6 +23,13 @@ options:
 
 Steam workshop .lpk file needs config.json to decrypt.
 
-.lpk file can be found at `path/to/your/steam/steamapps/workshop/content/616720/...` or `path/to/your/steam/steamapps/common/Live2DViewerEX/shared/workshop/...`
+.lpk file can be found at 
+
+`path/to/your/steam/steamapps/workshop/content/616720/...` 
+
+or 
+
+`path/to/your/steam/steamapps/common/Live2DViewerEX/shared/workshop/...`
+
 
 To decrypt .wpk file, you need to unzip it with 7zip or other unzip tools, and you will get .lpk file and config.json. 
