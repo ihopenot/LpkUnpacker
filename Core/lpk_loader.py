@@ -59,6 +59,10 @@ class LpkLoader():
         self.extract_model_json(filename, dir)
 
     def extract_model_json(self, model_json: str, dir):
+        # already extracted
+        if model_json in self.trans:
+            return
+
         subdir = dir
         entry_s = self.decrypt_file(model_json).decode(encoding="utf8")
         entry = json.loads(entry_s)
