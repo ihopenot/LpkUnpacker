@@ -59,6 +59,7 @@ class LpkLoader():
         self.extract_model_json(filename, dir)
 
     def extract_model_json(self, model_json: str, dir):
+        logger.debug(f"========= extracting model {model_json} =========")
         # already extracted
         if model_json in self.trans:
             return
@@ -77,8 +78,9 @@ class LpkLoader():
         logger.debug(f"model{id}.json:\n{entry}")
 
         for name, val in travels_dict(entry):
+            logger.debug(f"{name} -> {val}")
             # extract submodel
-            if name.endswith("_Command"):
+            if name.lower().endswith("_command"):
                 commands = val.split(";")
                 for cmd in commands:
                     enc_file = find_encrypted_file(cmd)
@@ -104,6 +106,8 @@ class LpkLoader():
                     name += f"_{id}"
                     _, suffix = self.recovery(enc_file, os.path.join(subdir, name))
                     self.trans[enc_file] = name + suffix
+        
+        logger.debug(f"========= end of model {model_json} =========")
 
 
     def check_decrypt(self, filename):
