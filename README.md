@@ -1,4 +1,6 @@
 # LpkUnpacker
+English/[中文](https://github.com/ihopenot/LpkUnpacker/blob/master/README_zh.md)
+
 This tool is designed to extract resources from Live2dExViewer's LPK files.
 
 If you encounter any issues while running this program, please consult the '[Issues](https://github.com/ihopenot/LpkUnpacker/issues)' section first.
