@@ -80,7 +80,7 @@ class LpkLoader():
         for name, val in travels_dict(entry):
             logger.debug(f"{name} -> {val}")
             # extract submodel
-            if name.lower().endswith("_command") or name.lower().endswith("_postcommand"):
+            if (name.lower().endswith("_command") or name.lower().endswith("_postcommand")) and val:
                 commands = val.split(";")
                 for cmd in commands:
                     enc_file = find_encrypted_file(cmd)
