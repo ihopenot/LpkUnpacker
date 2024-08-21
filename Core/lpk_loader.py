@@ -18,8 +18,11 @@ class LpkLoader():
     
     def load_lpk(self):
         self.lpkfile = zipfile.ZipFile(self.lpkpath)
+        try:
+            config_mlve_raw = self.lpkfile.read(hashed_filename("config.mlve")).decode()
+        except:
+            config_mlve_raw = self.lpkfile.read("config.mlve").decode()
 
-        config_mlve_raw = self.lpkfile.read(hashed_filename("config.mlve")).decode()
         self.mlve_config = json.loads(config_mlve_raw)
 
         logger.debug(f"mlve config:\n {self.mlve_config}")
@@ -32,21 +35,40 @@ class LpkLoader():
         self.config = json.loads(open(self.configpath, "r", encoding="utf8").read())
 
     def extract(self, outputdir: str):
-        for chara in self.mlve_config["list"]:
-            chara_name = chara["character"] if chara["character"] != "" else "character"
-            subdir =  os.path.join(outputdir, chara_name)
-            safe_mkdir(subdir)
+        if self.mlve_config["type"] == "STD_1_0":
+            for file in self.lpkfile.namelist():
+                subdir = os.path.join(outputdir, os.path.dirname(file))
+                outputFilePath = os.path.join(subdir, os.path.basename(file))
+                safe_mkdir(subdir)
 
-            for i in range(len(chara["costume"])):
-                logger.info(f"extracting {chara_name}_costume_{i}")
-                self.extract_costume(chara["costume"][i], subdir)
+                if os.path.splitext(file)[-1] in [".json", ".mlve"]:
+                    print(f"Extracting {file} -> {outputFilePath}")
+                    self.lpkfile.extract(file, outputdir)
+                else:
+                    print(f"Decrypting {file} -> {outputFilePath}")
+                    decryptedData = self.decrypt_file(file)
+                    with open(outputFilePath, "wb") as outputFile:
+                        outputFile.write(decryptedData)
 
-            # replace encryped filename to decrypted filename in entrys(model.json)
-            for name in self.entrys:
-                out_s: str = self.entrys[name]
-                for k in self.trans:
-                    out_s = out_s.replace(k, self.trans[k])
-                open(os.path.join(subdir, name), "w", encoding="utf8").write(out_s)
+
+
+        else:
+            for chara in self.mlve_config["list"]:
+                chara_name = chara["character"] if chara["character"] != "" else "character"
+                subdir =  os.path.join(outputdir, chara_name)
+                safe_mkdir(subdir)
+
+                for i in range(len(chara["costume"])):
+                    logger.info(f"extracting {chara_name}_costume_{i}")
+                    self.extract_costume(chara["costume"][i], subdir)
+
+                # replace encryped filename to decrypted filename in entrys(model.json)
+                for name in self.entrys:
+                    out_s: str = self.entrys[name]
+                    for k in self.trans:
+                        out_s = out_s.replace(k, self.trans[k])
+                    open(os.path.join(subdir, name), "w", encoding="utf8").write(out_s)
+        
     
     def extract_costume(self, costume: dict, dir: str):
         if costume["path"] == "":
@@ -160,6 +182,8 @@ class LpkLoader():
         if self.mlve_config["type"] == "STM_1_0":
             return genkey(self.mlve_config["id"] + self.config["fileId"] + file + self.config["metaData"])
         elif self.mlve_config["type"] == "STD2_0":
+            return genkey(self.mlve_config["id"] + file)
+        elif self.mlve_config["type"] == "STD_1_0":
             return genkey(self.mlve_config["id"] + file)
         else:
             raise Exception(f"not support type {self.mlve_config['type']}")

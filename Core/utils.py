@@ -12,7 +12,7 @@ def hashed_filename(s: str) -> str:
 
 def safe_mkdir(s: str):
     try:
-        os.mkdir(s)
+        os.makedirs(s)
     except FileExistsError:
         pass
 
