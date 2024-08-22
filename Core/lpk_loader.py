@@ -23,12 +23,11 @@ class LpkLoader():
         try:
             config_mlve_raw = self.lpkfile.read(hashed_filename("config.mlve")).decode()
         except KeyError:
-            pass
-        try:
-            config_mlve_raw = self.lpkfile.read("config.mlve").decode('utf-8-sig')
-        except:
-            logger.fatal("Failed to retrieve lpk config!")
-            exit(0)
+            try:
+                config_mlve_raw = self.lpkfile.read("config.mlve").decode('utf-8-sig')
+            except:
+                logger.fatal("Failed to retrieve lpk config!")
+                exit(0)
 
 
         self.mlve_config = json.loads(config_mlve_raw)
