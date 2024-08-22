@@ -12,6 +12,8 @@ class LpkLoader():
     def __init__(self, lpkpath, configpath) -> None:
         self.lpkpath = lpkpath
         self.configpath = configpath
+        self.lpkType = None
+        self.encrypted = True
         self.trans = {}
         self.entrys = {}
         self.load_lpk()
@@ -20,39 +22,28 @@ class LpkLoader():
         self.lpkfile = zipfile.ZipFile(self.lpkpath)
         try:
             config_mlve_raw = self.lpkfile.read(hashed_filename("config.mlve")).decode()
+        except KeyError:
+            pass
+        try:
+            config_mlve_raw = self.lpkfile.read("config.mlve").decode('utf-8-sig')
         except:
-            config_mlve_raw = self.lpkfile.read("config.mlve").decode()
+            logger.fatal("Failed to retrieve lpk config!")
+            exit(0)
+
 
         self.mlve_config = json.loads(config_mlve_raw)
 
         logger.debug(f"mlve config:\n {self.mlve_config}")
-
+        self.lpkType = self.mlve_config.get("type")
         # only steam workshop lpk needs config.json to decrypt
-        if self.mlve_config["type"] == "STM_1_0":
+        if self.lpkType == "STM_1_0":
             self.load_config()
     
     def load_config(self):
         self.config = json.loads(open(self.configpath, "r", encoding="utf8").read())
 
     def extract(self, outputdir: str):
-        if self.mlve_config["type"] == "STD_1_0":
-            for file in self.lpkfile.namelist():
-                subdir = os.path.join(outputdir, os.path.dirname(file))
-                outputFilePath = os.path.join(subdir, os.path.basename(file))
-                safe_mkdir(subdir)
-
-                if os.path.splitext(file)[-1] in [".json", ".mlve"]:
-                    print(f"Extracting {file} -> {outputFilePath}")
-                    self.lpkfile.extract(file, outputdir)
-                else:
-                    print(f"Decrypting {file} -> {outputFilePath}")
-                    decryptedData = self.decrypt_file(file)
-                    with open(outputFilePath, "wb") as outputFile:
-                        outputFile.write(decryptedData)
-
-
-
-        else:
+        if self.lpkType in ["STD2_0", "STM_1_0"]:
             for chara in self.mlve_config["list"]:
                 chara_name = chara["character"] if chara["character"] != "" else "character"
                 subdir =  os.path.join(outputdir, chara_name)
@@ -68,7 +59,33 @@ class LpkLoader():
                     for k in self.trans:
                         out_s = out_s.replace(k, self.trans[k])
                     open(os.path.join(subdir, name), "w", encoding="utf8").write(out_s)
-        
+        else:
+            try:
+                print("Deprecated/unknown lpk format detected. Attempting with STD_1_0 format...")
+                print("Decryption may not work for some packs, even though this script outputs all files.")
+                self.encrypted = self.mlve_config.get("encrypt", True)
+                if not self.encrypted:
+                    print("lpk is not encrypted, extracting all files...")
+                    self.lpkfile.extractall(outputdir)
+                    return
+                # For STD_1_0 and earlier
+                for file in self.lpkfile.namelist():
+                    if os.path.splitext(file)[-1] == '':
+                        continue
+                    subdir = os.path.join(outputdir, os.path.dirname(file))
+                    outputFilePath = os.path.join(subdir, os.path.basename(file))
+                    safe_mkdir(subdir)
+                    if os.path.splitext(file)[-1] in [".json", ".mlve", ".txt"]:
+                        print(f"Extracting {file} -> {outputFilePath}")
+                        self.lpkfile.extract(file, outputdir)
+                    else:
+                        print(f"Decrypting {file} -> {outputFilePath}")
+                        decryptedData = self.decrypt_file(file)
+                        with open(outputFilePath, "wb") as outputFile:
+                            outputFile.write(decryptedData)
+            except:
+                logger.fatal(f"Failed to decrypt {self.lpkpath}, possibly wrong/unsupported format.")
+                exit(0)
     
     def extract_costume(self, costume: dict, dir: str):
         if costume["path"] == "":
@@ -176,17 +193,18 @@ class LpkLoader():
         return ret, suffix
 
     def getkey(self, file: str):
-        if self.mlve_config["type"] == "STM_1_0" and self.mlve_config["encrypt"] != "true":
+        if self.lpkType == "STM_1_0" and self.mlve_config["encrypt"] != "true":
             return 0
-
-        if self.mlve_config["type"] == "STM_1_0":
+        if self.lpkType == "STM_1_0":
             return genkey(self.mlve_config["id"] + self.config["fileId"] + file + self.config["metaData"])
-        elif self.mlve_config["type"] == "STD2_0":
+        elif self.lpkType == "STD2_0":
             return genkey(self.mlve_config["id"] + file)
-        elif self.mlve_config["type"] == "STD_1_0":
+        elif self.lpkType == "STD_1_0":
             return genkey(self.mlve_config["id"] + file)
         else:
-            raise Exception(f"not support type {self.mlve_config['type']}")
+            return genkey("com.oukaitou.live2d.pro" + self.mlve_config["id"] + "cDaNJnUazx2B4xCYFnAPiYSyd2M=\n")
+        #else:
+            #raise Exception(f"not support type {self.mlve_config['type']}")
 
     def decrypt_file(self, filename) -> bytes:
         data = self.lpkfile.read(filename)
