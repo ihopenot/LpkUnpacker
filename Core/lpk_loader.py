@@ -13,7 +13,7 @@ class LpkLoader():
         self.lpkpath = lpkpath
         self.configpath = configpath
         self.lpkType = None
-        self.encrypted = True
+        self.encrypted = "true"
         self.trans = {}
         self.entrys = {}
         self.load_lpk()
@@ -62,8 +62,8 @@ class LpkLoader():
             try:
                 print("Deprecated/unknown lpk format detected. Attempting with STD_1_0 format...")
                 print("Decryption may not work for some packs, even though this script outputs all files.")
-                self.encrypted = self.mlve_config.get("encrypt", True)
-                if not self.encrypted:
+                self.encrypted = self.mlve_config.get("encrypt", "true")
+                if self.encrypted == "false":
                     print("lpk is not encrypted, extracting all files...")
                     self.lpkfile.extractall(outputdir)
                     return

@@ -5,6 +5,8 @@ This tool is designed to extract resources from Live2dExViewer's LPK files.
 
 If you encounter any issues while running this program, please consult the '[Issues](https://github.com/ihopenot/LpkUnpacker/issues)' section first.
 
+*Added support for (pre-)STD_1_0 formats.
+However, not all packs can be decrypted due to an unknown keygen/decryption algorithm.
 ## Requirements
 `python -m pip install -r requirements.txt`
 
