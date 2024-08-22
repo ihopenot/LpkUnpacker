@@ -5,6 +5,8 @@
 
 如果你在使用工具时遇到任何困难，请先查询'[Issues](https://github.com/ihopenot/LpkUnpacker/issues)'中的内容
 
+*增加了对STD_1_0以及之前的格式支持
+注意，少部分的早期lpk仍然无法解包，推测可能存在未知的密钥生成或解密算法
 ## 系统需求
 安装依赖：
 
