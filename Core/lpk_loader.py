@@ -201,9 +201,9 @@ class LpkLoader():
         elif self.lpkType == "STD_1_0":
             return genkey(self.mlve_config["id"] + file)
         else:
-            return genkey("com.oukaitou.live2d.pro" + self.mlve_config["id"] + "cDaNJnUazx2B4xCYFnAPiYSyd2M=\n")
+            #return genkey("com.oukaitou.live2d.pro" + self.mlve_config["id"] + "cDaNJnUazx2B4xCYFnAPiYSyd2M=\n")
         #else:
-            #raise Exception(f"not support type {self.mlve_config['type']}")
+            raise Exception(f"not support type {self.mlve_config['type']}")
 
     def decrypt_file(self, filename) -> bytes:
         data = self.lpkfile.read(filename)
