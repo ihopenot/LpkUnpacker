@@ -11,9 +11,9 @@
 1. 从[Releases](https://github.com/Moeary/LpkUnpackerGUI/releases/tag/Gold)页面下载最新的LpkUnpackerGUI.exe文件
 2. 双击运行LpkUnpackerGUI.exe
 3. 在界面中选择要解包的LPK文件、对应的config.json文件（或者拖动也行）以及输出目录(默认输出为exe程序目录下output文件夹)
-4. 点击"解包"按钮开始解包过程
+4. 点击"Extract"按钮开始解包过程
 
-![Guide Video](./Img/Guide.mp4)
+![Guide Animation](Img/Guide.gif)
 
 ### 方法二：从源码运行
 
