@@ -5,6 +5,7 @@ import json
 from Core.utils import *
 import logging
 import os
+import re
 
 logger = logging.getLogger("lpkLoder")
 
@@ -16,6 +17,7 @@ class LpkLoader():
         self.encrypted = "true"
         self.trans = {}
         self.entrys = {}
+        self.title = None
         self.load_lpk()
     
     def load_lpk(self):
@@ -40,14 +42,46 @@ class LpkLoader():
     
     def load_config(self):
         self.config = json.loads(open(self.configpath, "r", encoding="utf8").read())
+        # Extract title from config if available
+        if "title" in self.config:
+            self.title = self.config["title"]
+            # Clean title for use as folder name
+            self.title = self.sanitize_filename(self.title)
+
+    def sanitize_filename(self, filename):
+        """
+        Remove characters that are invalid in Windows filenames
+        and ensure no control characters remain
+        """
+        # First remove any control characters (including \r)
+        filename = ''.join(c for c in filename if ord(c) >= 32 or c == ' ')
+        
+        # Remove characters that are invalid in Windows filenames
+        invalid_chars = r'[<>:"/\\|?*]'
+        clean_name = re.sub(invalid_chars, '', filename)
+        
+        # Limit length to avoid path issues
+        if len(clean_name) > 100:
+            clean_name = clean_name[:100]
+        
+        # If empty after cleaning, use default
+        if not clean_name.strip():
+            clean_name = "untitled"
+        
+        return clean_name
 
     def extract(self, outputdir: str):
+        # Use title from config as subdirectory if available
+        if self.title:
+            outputdir = os.path.join(outputdir, self.title)
+            safe_mkdir(outputdir)
+            print(f"Using title as output folder: {outputdir}")
+        
         if self.lpkType in ["STD2_0", "STM_1_0"]:
             for chara in self.mlve_config["list"]:
                 chara_name = chara["character"] if chara["character"] != "" else "character"
-                subdir =  os.path.join(outputdir, chara_name)
+                subdir = outputdir
                 safe_mkdir(subdir)
-
                 for i in range(len(chara["costume"])):
                     logger.info(f"extracting {chara_name}_costume_{i}")
                     self.extract_costume(chara["costume"][i], subdir)
@@ -106,14 +140,22 @@ class LpkLoader():
         entry_s = self.decrypt_file(model_json).decode(encoding="utf8")
         entry = json.loads(entry_s)
 
+        # Update JSON references to use clean filenames
+        self.clean_json_references(entry)
+        
         out_s = json.dumps(entry, ensure_ascii=False)
-        id = len(self.entrys)
+        model_filename = "model.json"
+        
+        # Ensure unique model filenames
+        counter = 0
+        while os.path.exists(os.path.join(subdir, model_filename)):
+            counter += 1
+            model_filename = f"model_{counter}.json"
+        
+        self.entrys[model_filename] = out_s
+        self.trans[model_json] = model_filename
 
-        self.entrys[f"model{id}.json"] = out_s
-
-        self.trans[model_json] = f"model{id}.json"
-
-        logger.debug(f"model{id}.json:\n{entry}")
+        logger.debug(f"{model_filename}:\n{entry}")
 
         for name, val in travels_dict(entry):
             logger.debug(f"{name} -> {val}")
@@ -129,9 +171,9 @@ class LpkLoader():
                         enc_file = find_encrypted_file(cmd)
                         self.extract_model_json(enc_file, dir)
                     else:
-                        name += f"_{id}"
-                        _, suffix = self.recovery(enc_file, os.path.join(subdir, name))
-                        self.trans[enc_file] = name + suffix
+                        clean_name = self.clean_filename(name)
+                        _, suffix = self.recovery(enc_file, os.path.join(subdir, clean_name))
+                        self.trans[enc_file] = clean_name + suffix
 
 
             if is_encrypted_file(val):
@@ -141,12 +183,11 @@ class LpkLoader():
                     continue
                 # recover regular files
                 else:
-                    name += f"_{id}"
-                    _, suffix = self.recovery(enc_file, os.path.join(subdir, name))
-                    self.trans[enc_file] = name + suffix
+                    clean_name = self.clean_filename(name)
+                    _, suffix = self.recovery(enc_file, os.path.join(subdir, clean_name))
+                    self.trans[enc_file] = clean_name + suffix
         
         logger.debug(f"========= end of model {model_json} =========")
-
 
     def check_decrypt(self, filename):
         '''
@@ -187,9 +228,132 @@ class LpkLoader():
     def recovery(self, filename, output) -> Tuple[bytes, str]:
         ret = self.decrypt_file(filename)
         suffix = guess_type(ret)
-        print(f"recovering {filename} -> {output+suffix}")
-        open(output + suffix, "wb").write(ret)
+        
+        # Make sure the directory path is clean
+        dir_path = os.path.dirname(output)
+        
+        # Extra safety check - remove any control characters from the path
+        dir_path = ''.join(c for c in dir_path if ord(c) >= 32 or c == ' ')
+        
+        # Get the base output filename
+        base_output = os.path.basename(output)
+        
+        # Clean the filename to remove prefixes and suffixes
+        clean_filename = self.clean_filename(base_output)
+        
+        # Ensure unique filenames by adding an index if file exists
+        final_filename = clean_filename
+        counter = 0
+        while os.path.exists(os.path.join(dir_path, final_filename) + suffix):
+            counter += 1
+            name_parts = os.path.splitext(clean_filename)
+            final_filename = f"{name_parts[0]}_{counter}{name_parts[1]}"
+        
+        # Construct the final output path
+        final_output = os.path.join(dir_path, final_filename)
+        
+        try:
+            print(f"recovering {filename} -> {final_output+suffix}")
+            with open(final_output + suffix, "wb") as f:
+                f.write(ret)
+        except OSError as e:
+            # If there's still an error, use a simplified filename
+            safe_name = f"file_{hash(filename) % 10000}{suffix}"
+            safe_output = os.path.join(dir_path, safe_name)
+            print(f"Error with filename, using safe alternative: {safe_output}")
+            with open(safe_output, "wb") as f:
+                f.write(ret)
+            return ret, os.path.basename(safe_output)
+        
+        # Return the cleaned filename with suffix so trans dictionary uses clean names
         return ret, suffix
+
+    def clean_filename(self, filename):
+        """
+        Clean filenames by:
+        1. Removing common prefixes like "FileReferences_"
+        2. Removing patterns like "_File_0" or "_Sound_0" at the end
+        3. Preserving important identifiers like "Motions_1_Tap"
+        """
+        # Remove common prefixes
+        common_prefixes = [
+            "FileReferences_",
+        ]
+        
+        result = filename
+        for prefix in common_prefixes:
+            if result.startswith(prefix):
+                result = result.replace(prefix, "", 1)
+        
+        # Split by extension
+        base_name, ext = os.path.splitext(result)
+        
+        # Remove _File_X and _Sound_X patterns
+        base_name = re.sub(r'_File_\d+$', '', base_name)
+        base_name = re.sub(r'_Sound_\d+$', '', base_name)
+        
+        # Handle Motions_X_Type patterns specifically
+        if "Motions_" in base_name:
+            # Preserve the structure but remove unnecessary parts
+            parts = base_name.split('_')
+            cleaned_parts = []
+            i = 0
+            while i < len(parts):
+                # Keep Motions_ prefix
+                if parts[i] == "Motions":
+                    cleaned_parts.append(parts[i])
+                    
+                # Keep the number after Motions_
+                elif i > 0 and parts[i-1] == "Motions" and parts[i].isdigit():
+                    cleaned_parts.append(parts[i])
+                    
+                # Keep the type (like Tap, Idle, etc.) but skip any File/Sound suffixes
+                elif i > 1 and parts[i-2] == "Motions":
+                    if parts[i] not in ["File", "Sound"]:
+                        cleaned_parts.append(parts[i])
+                    else:
+                        # Skip both the File/Sound and the following number
+                        i += 1
+                        
+                # Keep other important parts
+                elif parts[i] not in ["File", "Sound"]:
+                    cleaned_parts.append(parts[i])
+                    
+                i += 1
+            
+            base_name = "_".join(cleaned_parts)
+        
+        # Handle other cases
+        else:
+            # Remove numeric suffixes at the end of parts
+            parts = base_name.split('_')
+            cleaned_parts = []
+            for i, part in enumerate(parts):
+                if part not in ["File", "Sound"] and not (i < len(parts)-1 and parts[i+1].isdigit() and (part == "File" or part == "Sound")):
+                    # Remove trailing numbers from the last part
+                    if i == len(parts)-1:
+                        part = re.sub(r'\d+$', '', part)
+                    cleaned_parts.append(part)
+            
+            base_name = "_".join(cleaned_parts)
+        
+        return base_name + ext
+
+    def clean_json_references(self, json_obj):
+        """Clean references in JSON by removing common prefixes"""
+        if isinstance(json_obj, dict):
+            for key, value in list(json_obj.items()):
+                if isinstance(value, (dict, list)):
+                    self.clean_json_references(value)
+                elif isinstance(value, str) and any(value.startswith(prefix) for prefix in ["FileReferences_"]):
+                    json_obj[key] = self.clean_filename(value)
+        elif isinstance(json_obj, list):
+            for item in json_obj:
+                if isinstance(item, (dict, list)):
+                    self.clean_json_references(item)
+                elif isinstance(item, str) and any(item.startswith(prefix) for prefix in ["FileReferences_"]):
+                    index = json_obj.index(item)
+                    json_obj[index] = self.clean_filename(item)
 
     def getkey(self, file: str):
         if self.lpkType == "STM_1_0" and self.mlve_config["encrypt"] != "true":

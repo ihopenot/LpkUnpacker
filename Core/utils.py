@@ -11,10 +11,44 @@ def hashed_filename(s: str) -> str:
     return t.hexdigest()
 
 def safe_mkdir(s: str):
+    """
+    Safely create a directory, handling invalid Windows directory names
+    by cleaning problematic characters and truncating if needed.
+    """
+    # First remove any control characters completely
+    s = ''.join(c for c in s if ord(c) >= 32 or c == ' ')
+    
+    # Handle other invalid Windows directory name characters
+    invalid_chars = r'[<>:"/\\|?*]'
+    parts = []
+    
+    # Process each path component separately
+    for part in s.split(os.sep):
+        # Remove invalid characters
+        clean_part = re.sub(invalid_chars, '', part)
+        # Truncate if too long
+        if len(clean_part) > 240:
+            clean_part = clean_part[:240]
+        # Use a default name if empty after cleaning
+        if not clean_part.strip():
+            clean_part = "unnamed"
+        parts.append(clean_part)
+    
+    # Reassemble the path
+    clean_path = os.sep.join(parts)
+    
     try:
-        os.makedirs(s)
-    except FileExistsError:
-        pass
+        os.makedirs(clean_path, exist_ok=True)
+    except Exception as e:
+        # If there's still an error, use a fallback path
+        import tempfile
+        fallback = os.path.join(tempfile.gettempdir(), 'lpkunpacker_output')
+        print(f"Error creating directory: {e}")
+        print(f"Using fallback directory: {fallback}")
+        os.makedirs(fallback, exist_ok=True)
+        return fallback
+    
+    return clean_path
 
 def genkey(s: str) -> int:
     ret = 0
@@ -112,4 +146,4 @@ def guess_type(data: bytes):
         json.loads(data.decode("utf8"))
         return ".json"
     except:
-        return ""
+        return ""   
