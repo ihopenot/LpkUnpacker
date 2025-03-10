@@ -15,34 +15,50 @@ def safe_mkdir(s: str):
     Safely create a directory, handling invalid Windows directory names
     by cleaning problematic characters and truncating if needed.
     """
-    # First remove any control characters completely
+    # Convert to absolute path if not already
+    s = os.path.abspath(s)
+    
+    # Normalize path separators
+    s = s.replace('\\', '/')
+    
+    # Remove any problematic characters
     s = ''.join(c for c in s if ord(c) >= 32 or c == ' ')
     
-    # Handle other invalid Windows directory name characters
-    invalid_chars = r'[<>:"/\\|?*]'
+    # Handle Windows path limits and invalid characters
     parts = []
-    
-    # Process each path component separately
-    for part in s.split(os.sep):
-        # Remove invalid characters
-        clean_part = re.sub(invalid_chars, '', part)
+    for part in s.split('/'):
+        # Skip empty parts
+        if not part:
+            continue
+            
+        # Clean part of invalid characters
+        clean_part = re.sub(r'[<>:"|?*]', '', part)
+        
         # Truncate if too long
         if len(clean_part) > 240:
             clean_part = clean_part[:240]
-        # Use a default name if empty after cleaning
+            
+        # Use default if empty after cleaning
         if not clean_part.strip():
             clean_part = "unnamed"
+            
         parts.append(clean_part)
     
-    # Reassemble the path
-    clean_path = os.sep.join(parts)
+    # Reconstruct the path
+    clean_path = '/'.join(parts)
+    
+    # For Windows, ensure drive letter is followed by ':'
+    if re.match(r'^[a-zA-Z]', clean_path):
+        clean_path = clean_path[0] + ':' + clean_path[1:]
     
     try:
+        # Create the directory
         os.makedirs(clean_path, exist_ok=True)
+        print(f"Created directory: {clean_path}")
     except Exception as e:
-        # If there's still an error, use a fallback path
+        # Use a fallback if all else fails
         import tempfile
-        fallback = os.path.join(tempfile.gettempdir(), 'lpkunpacker_output')
+        fallback = os.path.join(tempfile.gettempdir(), 'lpkunpacker_output').replace('\\', '/')
         print(f"Error creating directory: {e}")
         print(f"Using fallback directory: {fallback}")
         os.makedirs(fallback, exist_ok=True)
@@ -146,4 +162,4 @@ def guess_type(data: bytes):
         json.loads(data.decode("utf8"))
         return ".json"
     except:
-        return ""   
+        return ""

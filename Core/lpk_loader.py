@@ -11,8 +11,9 @@ logger = logging.getLogger("lpkLoder")
 
 class LpkLoader():
     def __init__(self, lpkpath, configpath) -> None:
-        self.lpkpath = lpkpath
-        self.configpath = configpath
+        # Convert to absolute paths immediately 
+        self.lpkpath = os.path.abspath(lpkpath) if lpkpath else None
+        self.configpath = os.path.abspath(configpath) if configpath else None
         self.lpkType = None
         self.encrypted = "true"
         self.trans = {}
@@ -71,9 +72,14 @@ class LpkLoader():
         return clean_name
 
     def extract(self, outputdir: str):
+        # Always convert to absolute path for output
+        outputdir = os.path.abspath(outputdir)
+        
         # Use title from config as subdirectory if available
         if self.title:
-            outputdir = os.path.join(outputdir, self.title)
+            # Normalize and clean the path to avoid issues
+            clean_title = self.sanitize_filename(self.title)
+            outputdir = os.path.join(outputdir, clean_title)
             safe_mkdir(outputdir)
             print(f"Using title as output folder: {outputdir}")
         
@@ -226,22 +232,25 @@ class LpkLoader():
                     exit(0)
 
     def recovery(self, filename, output) -> Tuple[bytes, str]:
+        """
+        Decrypt and save a file with the given filename to the output path
+        Returns the decrypted data and file suffix
+        """
+        # Get the decrypted data
         ret = self.decrypt_file(filename)
         suffix = guess_type(ret)
         
-        # Make sure the directory path is clean
+        # Ensure output path uses forward slashes consistently
+        output = output.replace('\\', '/')
+        
+        # Get just the directory and base filename
         dir_path = os.path.dirname(output)
+        base_name = os.path.basename(output)
         
-        # Extra safety check - remove any control characters from the path
-        dir_path = ''.join(c for c in dir_path if ord(c) >= 32 or c == ' ')
+        # Clean the filename (remove prefixes/suffixes)
+        clean_filename = self.clean_filename(base_name)
         
-        # Get the base output filename
-        base_output = os.path.basename(output)
-        
-        # Clean the filename to remove prefixes and suffixes
-        clean_filename = self.clean_filename(base_output)
-        
-        # Ensure unique filenames by adding an index if file exists
+        # Ensure the file has a unique name
         final_filename = clean_filename
         counter = 0
         while os.path.exists(os.path.join(dir_path, final_filename) + suffix):
@@ -249,23 +258,36 @@ class LpkLoader():
             name_parts = os.path.splitext(clean_filename)
             final_filename = f"{name_parts[0]}_{counter}{name_parts[1]}"
         
-        # Construct the final output path
-        final_output = os.path.join(dir_path, final_filename)
+        # Final file path
+        final_path = os.path.join(dir_path, final_filename).replace('\\', '/')
         
         try:
-            print(f"recovering {filename} -> {final_output+suffix}")
-            with open(final_output + suffix, "wb") as f:
+            # Ensure the directory exists
+            os.makedirs(dir_path, exist_ok=True)
+            
+            print(f"Recovering {filename} -> {final_path+suffix}")
+            with open(final_path + suffix, "wb") as f:
                 f.write(ret)
         except OSError as e:
-            # If there's still an error, use a simplified filename
-            safe_name = f"file_{hash(filename) % 10000}{suffix}"
-            safe_output = os.path.join(dir_path, safe_name)
-            print(f"Error with filename, using safe alternative: {safe_output}")
-            with open(safe_output, "wb") as f:
-                f.write(ret)
-            return ret, os.path.basename(safe_output)
+            # If saving fails, use a simpler filename
+            safe_name = f"file_{abs(hash(filename)) % 10000}{suffix}"
+            safe_path = os.path.join(dir_path, safe_name).replace('\\', '/')
+            print(f"Error with filename, using safe alternative: {safe_path}")
+            
+            try:
+                os.makedirs(dir_path, exist_ok=True)
+                with open(safe_path, "wb") as f:
+                    f.write(ret)
+                return ret, safe_name
+            except OSError as e2:
+                # Last resort: use the root output directory
+                root_dir = os.path.dirname(os.path.dirname(dir_path))
+                safe_path = os.path.join(root_dir, safe_name).replace('\\', '/')
+                os.makedirs(root_dir, exist_ok=True)
+                with open(safe_path, "wb") as f:
+                    f.write(ret)
+                return ret, safe_name
         
-        # Return the cleaned filename with suffix so trans dictionary uses clean names
         return ret, suffix
 
     def clean_filename(self, filename):
