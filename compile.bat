@@ -3,20 +3,20 @@ REM filepath: d:\Python_Project\LpkUnpackerGUI\compile.bat
 echo ===== LpkUnpackerGUI Compiler =====
 echo Starting compilation process...
 
-REM Activate Conda base environment
-echo Activating Conda base environment...
-call conda activate base
-if %ERRORLEVEL% neq 0 (
-    echo Error: Failed to activate Conda base environment!
-    echo Make sure Conda is properly installed and initialized.
-    pause
-    exit /b 1
-)
+@REM REM Activate Conda base environment
+@REM echo Activating Conda base environment...
+@REM call conda activate base
+@REM if %ERRORLEVEL% neq 0 (
+@REM     echo Error: Failed to activate Conda base environment!
+@REM     echo Make sure Conda is properly installed and initialized.
+@REM     pause
+@REM     exit /b 1
+@REM )
 
 REM Check if Python is available
 where python >nul 2>&1
 if %ERRORLEVEL% neq 0 (
-    echo Error: Python not found in Conda environment!
+    echo Error: Python not found!
     pause
     exit /b 1
 )
@@ -24,20 +24,23 @@ if %ERRORLEVEL% neq 0 (
 REM Check if nuitka is installed
 python -c "import nuitka" >nul 2>&1
 if %ERRORLEVEL% neq 0 (
-    echo Warning: Nuitka not found. Attempting to install it...
-    conda install -c conda-forge nuitka -y
-    if %ERRORLEVEL% neq 0 (
-        echo Failed to install Nuitka through Conda. Trying pip...
-        pip install nuitka
-        if %ERRORLEVEL% neq 0 (
-            echo Failed to install Nuitka. Aborting compilation.
-            pause
-            exit /b 1
-        )
-    )
+    echo Error: Nuitka not found.
+    pause
+    exit /b 1
+    @REM echo Warning: Nuitka not found. Attempting to install it...
+    @REM conda install -c conda-forge nuitka -y
+    @REM if %ERRORLEVEL% neq 0 (
+    @REM     echo Failed to install Nuitka through Conda. Trying pip...
+    @REM     pip install nuitka
+    @REM     if %ERRORLEVEL% neq 0 (
+    @REM         echo Failed to install Nuitka. Aborting compilation.
+    @REM         pause
+    @REM         exit /b 1
+    @REM     )
+    @REM )
 )
 
-echo Compiling application with Nuitka in Conda base environment...
+echo Compiling application with Nuitka...
 echo This may take several minutes. Please be patient...
 
 REM Main compilation command
