@@ -1,7 +1,6 @@
 import sys
 import argparse
 from Core.lpk_loader import *
-from Core.utils import *
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-v", "--verbosity", action="count", default=0, help="increase output verbosity")

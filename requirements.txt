@@ -1,1 +1,4 @@
-filetype==1.2.0
+PyQt-Fluent-Widgets>=1.4.0
+PyQt5>=5.15.0
+filetype>=1.0.0
+live2d-py>=0.3.3

@@ -40,11 +40,14 @@ class LpkLoader():
     
     def load_config(self):
         self.config = json.loads(open(self.configpath, "r", encoding="utf8").read())
-
+    
     def extract(self, outputdir: str):
         if self.lpkType in ["STD2_0", "STM_1_0"]:
             for chara in self.mlve_config["list"]:
-                chara_name = chara["character"] if chara["character"] != "" else "character"
+                if self.lpkType == "STM_1_0" and hasattr(self, 'config') and 'title' in self.config:
+                    chara_name = self.config["title"]
+                else:
+                    chara_name = chara["character"] if chara["character"] != "" else "character"
                 subdir =  os.path.join(outputdir, chara_name)
                 safe_mkdir(subdir)
 
@@ -130,6 +133,7 @@ class LpkLoader():
                         self.extract_model_json(enc_file, dir)
                     else:
                         name += f"_{id}"
+                        name = self.name_change(name)
                         _, suffix = self.recovery(enc_file, os.path.join(subdir, name))
                         self.trans[enc_file] = name + suffix
 
@@ -142,6 +146,7 @@ class LpkLoader():
                 # recover regular files
                 else:
                     name += f"_{id}"
+                    name = self.name_change(name)
                     _, suffix = self.recovery(enc_file, os.path.join(subdir, name))
                     self.trans[enc_file] = name + suffix
         
@@ -212,3 +217,8 @@ class LpkLoader():
     def decrypt_data(self, filename: str, data: bytes) -> bytes:
         key = self.getkey(filename)
         return decrypt(key, data)
+    
+    def name_change(self, name: str) -> str:
+        #去除name里面的FileReferences_
+        name = name.replace("FileReferences_", "")
+        return name.replace("\\", "/")
