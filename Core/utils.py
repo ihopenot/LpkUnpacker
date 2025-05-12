@@ -10,61 +10,20 @@ def hashed_filename(s: str) -> str:
     t.update(s.encode())
     return t.hexdigest()
 
+def normalize(s: str) -> str:
+    s = ''.join(c for c in s if ord(c) >= 32 or c == ' ')
+    s = re.sub(r'[<>:"|?*]', '', s)
+    if not s.strip():
+        s = "unnamed"
+    return s
+
 def safe_mkdir(s: str):
     """
-    Safely create a directory, handling invalid Windows directory names
-    by cleaning problematic characters and truncating if needed.
+    Safely create a directory
     """
-    # Convert to absolute path if not already
-    s = os.path.abspath(s)
-    
-    # Normalize path separators
-    s = s.replace('\\', '/')
-    
-    # Remove any problematic characters
-    s = ''.join(c for c in s if ord(c) >= 32 or c == ' ')
-    
-    # Handle Windows path limits and invalid characters
-    parts = []
-    for part in s.split('/'):
-        # Skip empty parts
-        if not part:
-            continue
-            
-        # Clean part of invalid characters
-        clean_part = re.sub(r'[<>:"|?*]', '', part)
-        
-        # Truncate if too long
-        if len(clean_part) > 240:
-            clean_part = clean_part[:240]
-            
-        # Use default if empty after cleaning
-        if not clean_part.strip():
-            clean_part = "unnamed"
-            
-        parts.append(clean_part)
-    
-    # Reconstruct the path
-    clean_path = '/'.join(parts)
-    
-    # For Windows, ensure drive letter is followed by ':'
-    if re.match(r'^[a-zA-Z]', clean_path):
-        clean_path = clean_path[0] + ':' + clean_path[1:]
-    
-    try:
-        # Create the directory
-        os.makedirs(clean_path, exist_ok=True)
-        print(f"Created directory: {clean_path}")
-    except Exception as e:
-        # Use a fallback if all else fails
-        import tempfile
-        fallback = os.path.join(tempfile.gettempdir(), 'lpkunpacker_output').replace('\\', '/')
-        print(f"Error creating directory: {e}")
-        print(f"Using fallback directory: {fallback}")
-        os.makedirs(fallback, exist_ok=True)
-        return fallback
-    
-    return clean_path
+    # Create the directory
+    os.makedirs(s, exist_ok=True)
+    print(f"Created directory: {s}")
 
 def genkey(s: str) -> int:
     ret = 0

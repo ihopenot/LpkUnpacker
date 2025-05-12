@@ -48,7 +48,7 @@ class LpkLoader():
                     chara_name = self.config["title"]
                 else:
                     chara_name = chara["character"] if chara["character"] != "" else "character"
-                subdir =  os.path.join(outputdir, chara_name)
+                subdir =  os.path.join(outputdir, normalize(chara_name))
                 safe_mkdir(subdir)
 
                 for i in range(len(chara["costume"])):
