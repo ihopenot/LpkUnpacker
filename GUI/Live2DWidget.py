@@ -189,7 +189,17 @@ class Live2DWidget(OpenGLCanvas):
         self.is_initialized = False
         self.is_loading = False
         self.setAttribute(Qt.WA_TranslucentBackground)
-        
+
+        # Mouse interaction settings
+        self.mouse_tracking_enabled = True
+        self.mouse_drag_enabled = True
+        self.mouse_sensitivity = 1.0
+        self.last_mouse_pos = None
+        self.is_dragging = False
+
+        # Enable mouse tracking
+        self.setMouseTracking(True)
+
         # Setup animation timer
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update)
@@ -204,11 +214,11 @@ class Live2DWidget(OpenGLCanvas):
         except ImportError as e:
             print(f"Failed to initialize Live2D: {e}")
             self.is_initialized = False
-    
+
     def on_draw(self):
         if not self.is_initialized or self.model is None:
             return
-            
+
         try:
             self.live2d_module.clearBuffer()
             self.model.Update()
@@ -227,16 +237,16 @@ class Live2DWidget(OpenGLCanvas):
         """Load a Live2D model from the given path"""
         if not self.is_initialized or self.is_loading:
             return False
-        
+
         # Check for valid model path
         if not os.path.exists(model_path):
             print(f"Model file not found: {model_path}")
             return False
-            
+
         try:
             self.is_loading = True
             self.release()  # Release previous model if any
-            
+
             # Create and load model
             self.model = self.live2d_module.LAppModel()
             self.model.LoadModelJson(model_path)
@@ -260,12 +270,115 @@ class Live2DWidget(OpenGLCanvas):
             except Exception as e:
                 print(f"Error releasing model: {e}")
 
+    def set_mouse_settings(self, tracking_enabled=True, drag_enabled=True, sensitivity=1.0):
+        """设置鼠标交互参数"""
+        self.mouse_tracking_enabled = tracking_enabled
+        self.mouse_drag_enabled = drag_enabled
+        self.mouse_sensitivity = sensitivity
+        self.setMouseTracking(tracking_enabled)
+
+    def mousePressEvent(self, event):
+        """鼠标按下事件"""
+        if self.model is not None and self.is_initialized and self.mouse_drag_enabled:
+            if event.button() == Qt.LeftButton:
+                self.is_dragging = True
+                self.last_mouse_pos = event.pos()
+
+                try:
+                    # 触发点击事件
+                    self.model.Touch(event.x(), event.y())
+                    self.update()
+                except Exception as e:
+                    print(f"Error handling mouse press: {e}")
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        """鼠标释放事件"""
+        if event.button() == Qt.LeftButton:
+            self.is_dragging = False
+            self.last_mouse_pos = None
+
+            if self.model is not None and self.is_initialized:
+                try:
+                    # 停止拖拽
+                    self.model.Drag(0, 0)  # 重置拖拽状态
+                except Exception as e:
+                    print(f"Error handling mouse release: {e}")
+        super().mouseReleaseEvent(event)
+
     def mouseMoveEvent(self, event):
         """Handle mouse movement for interacting with the model"""
         if self.model is not None and self.is_initialized:
             try:
-                self.model.Drag(event.x(), event.y())
+                if self.is_dragging and self.mouse_drag_enabled and self.last_mouse_pos is not None:
+                    # 拖拽交互
+                    dx = (event.x() - self.last_mouse_pos.x()) * self.mouse_sensitivity
+                    dy = (event.y() - self.last_mouse_pos.y()) * self.mouse_sensitivity
+                    self.model.Drag(dx, dy)
+                    self.last_mouse_pos = event.pos()
+                elif self.mouse_tracking_enabled and not self.is_dragging:
+                    # 鼠标跟踪交互
+                    # 将屏幕坐标转换为Live2D坐标系
+                    x = (event.x() / self.width()) * 2.0 - 1.0
+                    y = -((event.y() / self.height()) * 2.0 - 1.0)
+
+                    # 应用灵敏度
+                    x *= self.mouse_sensitivity
+                    y *= self.mouse_sensitivity
+
+                    # 限制范围
+                    x = max(-1.0, min(1.0, x))
+                    y = max(-1.0, min(1.0, y))
+
+                    self.model.SetDragging(x, y)
+
                 self.update()
             except Exception as e:
                 print(f"Error handling mouse movement: {e}")
         super().mouseMoveEvent(event)
+
+    def enterEvent(self, event):
+        """鼠标进入事件"""
+        if self.mouse_tracking_enabled:
+            self.setMouseTracking(True)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        """鼠标离开事件"""
+        if self.model is not None and self.is_initialized:
+            try:
+                # 重置模型状态
+                self.model.SetDragging(0, 0)
+                self.update()
+            except Exception as e:
+                print(f"Error handling mouse leave: {e}")
+        super().leaveEvent(event)
+
+    def wheelEvent(self, event):
+        """鼠标滚轮事件 - 可用于缩放"""
+        if self.model is not None and self.is_initialized:
+            try:
+                # 获取滚轮增量
+                delta = event.angleDelta().y()
+                if delta > 0:
+                    # 向上滚动 - 放大
+                    self.model.AddToParamFloat("ParamBodyAngleZ", 1.0)
+                else:
+                    # 向下滚动 - 缩小
+                    self.model.AddToParamFloat("ParamBodyAngleZ", -1.0)
+                self.update()
+            except Exception as e:
+                print(f"Error handling wheel event: {e}")
+        super().wheelEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        """鼠标双击事件 - 可触发特殊动作"""
+        if self.model is not None and self.is_initialized:
+            try:
+                # 触发表情变化或特殊动画
+                if event.button() == Qt.LeftButton:
+                    self.model.StartRandomMotion("TapBody", 1)
+                self.update()
+            except Exception as e:
+                print(f"Error handling double click: {e}")
+        super().mouseDoubleClickEvent(event)
