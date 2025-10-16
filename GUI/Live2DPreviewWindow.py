@@ -6,23 +6,9 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QPoint
 from PyQt5.QtGui import QColor, QPalette, QMouseEvent, QPaintEvent, QFont
 from qfluentwidgets import (PushButton, Slider, CheckBox, SubtitleLabel, BodyLabel, SpinBox)
-try:
-    from qfluentwidgets import Card
-except ImportError:
-    # 如果无法导入Card，使用标准PyQt组件作为替代
-    class Card(QFrame):
-        def __init__(self, parent=None):
-            super().__init__(parent)
-            self.setFrameStyle(QFrame.Box)
-            self.setStyleSheet("""
-                QFrame {
-                    background-color: white;
-                    border: 1px solid #e0e0e0;
-                    border-radius: 8px;
-                    padding: 5px;
-                }
-            """)
-from GUI.Live2DWidget import Live2DWidget
+from qfluentwidgets import CardWidget
+
+from GUI.Live2DCanvas import Live2DCanvas
 
 
 class Live2DPreviewWindow(QWidget):
@@ -42,6 +28,8 @@ class Live2DPreviewWindow(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setStyleSheet("""
             Live2DPreviewWindow {
+                border: 2px solid rgba(255, 255, 255, 0.3);
+                border-radius: 10px;
                 background: transparent;
             }
         """)
@@ -53,13 +41,10 @@ class Live2DPreviewWindow(QWidget):
         # 初始化UI
         self.setup_ui()
 
-        # 加载模型
-        if model_path and os.path.exists(model_path):
-            self.load_model(model_path)
+        # # 加载模型
+        # if model_path and os.path.exists(model_path):
+        #     self.load_model(model_path)
 
-        # 设置关闭定时器（可选，用于自动关闭）
-        self.auto_close_timer = QTimer()
-        self.auto_close_timer.setSingleShot(True)
 
     def setup_ui(self):
         """设置用户界面"""
@@ -68,22 +53,21 @@ class Live2DPreviewWindow(QWidget):
         layout.setSpacing(0)
 
         # 创建Live2D显示区域
-        self.live2d_widget = Live2DWidget(self)
-        self.live2d_widget.setMinimumSize(300, 400)
-
-        # 设置Live2D widget样式
-        self.live2d_widget.setStyleSheet("""
-            Live2DWidget {
-                background: transparent;
-                border: 2px solid rgba(255, 255, 255, 0.3);
-                border-radius: 10px;
-            }
-            Live2DWidget:hover {
-                border: 2px solid rgba(255, 255, 255, 0.5);
-            }
-        """)
-
-        layout.addWidget(self.live2d_widget)
+        # self.live2d_widget = Live2DWidget(self)
+        #
+        # # 设置Live2D widget样式
+        # self.live2d_widget.setStyleSheet("""
+        #     Live2DWidget {
+        #         background: transparent;
+        #         border: 2px solid rgba(255, 255, 255, 0.3);
+        #         border-radius: 10px;
+        #     }
+        #     Live2DWidget:hover {
+        #         border: 2px solid rgba(255, 255, 255, 0.5);
+        #     }
+        # """)
+        #
+        # layout.addWidget(self.live2d_widget)
 
         # 创建控制面板（可隐藏）
         self.control_panel = self.create_control_panel()
@@ -92,10 +76,10 @@ class Live2DPreviewWindow(QWidget):
 
     def create_control_panel(self):
         """创建控制面板"""
-        panel = Card(self)
+        panel = CardWidget(self)
         panel.setFixedHeight(150)
         panel.setStyleSheet("""
-            Card {
+            CardWidget {
                 background: rgba(30, 30, 30, 0.9);
                 border-radius: 10px;
             }
@@ -116,11 +100,6 @@ class Live2DPreviewWindow(QWidget):
         self.toggle_controls_btn = PushButton("Hide Controls", panel)
         self.toggle_controls_btn.clicked.connect(self.toggle_control_panel)
         button_layout.addWidget(self.toggle_controls_btn)
-
-        # 置顶切换按钮
-        self.stay_on_top_btn = PushButton("Stay On Top: ON", panel)
-        self.stay_on_top_btn.clicked.connect(self.toggle_stay_on_top)
-        button_layout.addWidget(self.stay_on_top_btn)
 
         # 关闭按钮
         close_btn = PushButton("Close", panel)
@@ -152,22 +131,6 @@ class Live2DPreviewWindow(QWidget):
         y = (screen.height() - size.height()) // 2
         self.move(x, y)
 
-    def load_model(self, model_path):
-        """加载Live2D模型"""
-        if self.live2d_widget and os.path.exists(model_path):
-            success = self.live2d_widget.load(model_path)
-            if success:
-                self.model_path = model_path
-                self.setWindowTitle(f"Live2D Preview - {os.path.basename(model_path)}")
-                # 设置默认鼠标交互
-                self.live2d_widget.set_mouse_settings(
-                    tracking_enabled=True,
-                    drag_enabled=True,
-                    sensitivity=1.0
-                )
-            return success
-        return False
-
     def apply_settings(self, settings):
         """应用设置到预览窗口和Live2D模型"""
         if not settings:
@@ -181,14 +144,6 @@ class Live2DPreviewWindow(QWidget):
             self.setWindowOpacity(settings['opacity'])
             if self.live2d_widget:
                 self.live2d_widget.setCanvasOpacity(settings['opacity'])
-
-        if 'stay_on_top' in settings:
-            flags = self.windowFlags()
-            if settings['stay_on_top']:
-                flags |= Qt.WindowStaysOnTopHint
-            else:
-                flags &= ~Qt.WindowStaysOnTopHint
-            self.setWindowFlags(flags)
 
         # 应用鼠标交互设置
         if self.live2d_widget and all(key in settings for key in ['mouse_tracking', 'mouse_drag', 'sensitivity']):
@@ -210,19 +165,6 @@ class Live2DPreviewWindow(QWidget):
             self.toggle_controls_btn.setText("Hide Controls")
             # 调整窗口大小
             self.resize(self.width(), self.live2d_widget.height() + self.control_panel.height() + 20)
-
-    def toggle_stay_on_top(self):
-        """切换窗口置顶状态"""
-        flags = self.windowFlags()
-        if flags & Qt.WindowStaysOnTopHint:
-            # 取消置顶
-            self.setWindowFlags(flags & ~Qt.WindowStaysOnTopHint)
-            self.stay_on_top_btn.setText("Stay On Top: OFF")
-        else:
-            # 设置置顶
-            self.setWindowFlags(flags | Qt.WindowStaysOnTopHint)
-            self.stay_on_top_btn.setText("Stay On Top: ON")
-        self.show()  # 重新显示窗口
 
     def on_opacity_changed(self, value):
         """透明度变化处理"""
@@ -274,8 +216,6 @@ class Live2DPreviewWindow(QWidget):
             self.close()
         elif event.key() == Qt.Key_Space:
             self.toggle_control_panel()
-        elif event.key() == Qt.Key_T:
-            self.toggle_stay_on_top()
         super().keyPressEvent(event)
 
     def closeEvent(self, event):
