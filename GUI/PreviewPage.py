@@ -41,12 +41,16 @@ class DragDropArea(QFrame):
         icon_label.setAlignment(Qt.AlignCenter)
 
         # 主要提示文字
-        main_text = SubtitleLabel("Drag & Drop .moc3 files here", self)
+        main_text = SubtitleLabel("Drag & Drop Live2D model files here", self)
         main_text.setAlignment(Qt.AlignCenter)
 
         # 次要提示文字
-        sub_text = BodyLabel("Or click to browse files", self)
+        sub_text = BodyLabel("Supported: .moc3, .model3.json files", self)
         sub_text.setAlignment(Qt.AlignCenter)
+
+        # 额外提示文字
+        browse_text = BodyLabel("Or click to browse files", self)
+        browse_text.setAlignment(Qt.AlignCenter)
 
         # 浏览文件按钮
         self.browse_btn = PushButton("Browse Files", self)
@@ -55,16 +59,17 @@ class DragDropArea(QFrame):
         layout.addWidget(icon_label)
         layout.addWidget(main_text)
         layout.addWidget(sub_text)
+        layout.addWidget(browse_text)
         layout.addWidget(self.browse_btn)
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         """拖拽进入事件"""
         if event.mimeData().hasUrls():
-            # 检查是否为.moc3文件
+            # 检查是否为Live2D模型文件
             urls = event.mimeData().urls()
             if urls and len(urls) == 1:
-                file_path = urls[0].toLocalFile()
-                if file_path.lower().endswith('.moc3'):
+                file_path = urls[0].toLocalFile().lower()
+                if file_path.endswith('.moc3') or file_path.endswith('.model3.json'):
                     event.acceptProposedAction()
                     self.setStyleSheet("""
                         DragDropArea {
@@ -95,7 +100,8 @@ class DragDropArea(QFrame):
         urls = event.mimeData().urls()
         if urls and len(urls) == 1:
             file_path = urls[0].toLocalFile()
-            if file_path.lower().endswith('.moc3') and os.path.exists(file_path):
+            file_path_lower = file_path.lower()
+            if (file_path_lower.endswith('.moc3') or file_path_lower.endswith('.model3.json')) and os.path.exists(file_path):
                 self.fileDropped.emit(file_path)
                 event.acceptProposedAction()
 
@@ -108,7 +114,7 @@ class DragDropArea(QFrame):
             self,
             "Select Live2D Model File",
             "",
-            "Live2D Model Files (*.moc3);;All Files (*)"
+            "Live2D Model Files (*.moc3 *.model3.json);;MOC3 Files (*.moc3);;Model3 JSON Files (*.model3.json);;All Files (*)"
         )
 
         if file_path and os.path.exists(file_path):
@@ -126,7 +132,7 @@ class Live2DSettingsPanel(QFrame):
         self.height_spinbox = None
         self.opacity_label = None
         self.opacity_slider = None
-        self.stay_on_top_check = None
+        # self.stay_on_top_check = None
         self.show_controls_check = None
 
         self.scale_label = None
@@ -140,7 +146,7 @@ class Live2DSettingsPanel(QFrame):
         self.selected_bg_color = QColor(255, 255, 255)
 
         self.mouse_tracking_check = None
-        self.mouse_drag_check = None
+        self.auto_blink_check = None
         self.auto_breath_check = None
         self.sensitivity_label = None
         self.sensitivity_slider = None
@@ -211,9 +217,9 @@ class Live2DSettingsPanel(QFrame):
 
         layout.addLayout(size_layout)
 
-        # 窗口透明度
+        # 模型透明度
         opacity_layout = QHBoxLayout()
-        opacity_layout.addWidget(BodyLabel("Window Opacity:", group))
+        opacity_layout.addWidget(BodyLabel("Opacity:", group))
 
         self.opacity_slider = Slider(Qt.Horizontal, group)
         self.opacity_slider.setRange(10, 100)
@@ -230,11 +236,6 @@ class Live2DSettingsPanel(QFrame):
         opacity_layout.addWidget(self.opacity_label)
 
         layout.addLayout(opacity_layout)
-
-        # 窗口选项
-        self.stay_on_top_check = CheckBox("Always stay on top", group)
-        self.stay_on_top_check.setChecked(True)
-        layout.addWidget(self.stay_on_top_check)
 
         self.show_controls_check = CheckBox("Show control panel by default", group)
         layout.addWidget(self.show_controls_check)
@@ -339,9 +340,9 @@ class Live2DSettingsPanel(QFrame):
         self.mouse_tracking_check.setChecked(True)
         layout.addWidget(self.mouse_tracking_check)
 
-        self.mouse_drag_check = CheckBox("Enable mouse drag interaction", group)
-        self.mouse_drag_check.setChecked(True)
-        layout.addWidget(self.mouse_drag_check)
+        self.auto_blink_check = CheckBox("Enable auto blinking animation", group)
+        self.auto_blink_check.setChecked(True)
+        layout.addWidget(self.auto_blink_check)
 
         self.auto_breath_check = CheckBox("Enable auto breathing animation", group)
         self.auto_breath_check.setChecked(True)
@@ -377,20 +378,8 @@ class Live2DSettingsPanel(QFrame):
 
         if dlg.exec_():
             # 确认后取最终颜色（若无 color 属性则尝试其他兼容属性/方法）
-            color = None
-            for name in ("color", "currentColor", "selectedColor"):
-                attr = getattr(dlg, name, None)
-                if isinstance(attr, QColor):
-                    color = attr
-                    break
-                if callable(attr):
-                    try:
-                        c = attr()
-                        if isinstance(c, QColor):
-                            color = c
-                            break
-                    except Exception:
-                        pass
+            color = getattr(dlg, 'color', None)
+
             if isinstance(color, QColor):
                 self._update_selected_color(color)
 
@@ -406,7 +395,6 @@ class Live2DSettingsPanel(QFrame):
         return {
             'window_size': (self.width_spinbox.value(), self.height_spinbox.value()),
             'opacity': self.opacity_slider.value() / 100.0,
-            'stay_on_top': self.stay_on_top_check.isChecked(),
             'show_controls': self.show_controls_check.isChecked(),
             'model_scale': self.scale_slider.value() / 100.0,
             'position_offset': (self.position_x_spinbox.value(), self.position_y_spinbox.value()),
@@ -492,7 +480,7 @@ class PreviewPage(QFrame):
         # 添加到分割器
         splitter.addWidget(left_widget)
         splitter.addWidget(self.settings_panel)
-        splitter.setSizes([300, 400])  # 设置初始比例
+        splitter.setSizes([250, 450])  # 设置初始比例
 
         self.main_layout.addWidget(splitter)
         self.main_layout.setStretch(0, 0)
@@ -507,19 +495,37 @@ class PreviewPage(QFrame):
             self.show_error("File not found", f"The file {file_path} does not exist.")
             return
 
-        if not file_path.lower().endswith('.moc3'):
-            self.show_error("Invalid file type", "Please select a .moc3 Live2D model file.")
+        # 检查文件扩展名，支持.moc3和.model3.json文件
+        file_ext = file_path.lower()
+        if not (file_ext.endswith('.moc3') or file_ext.endswith('.model3.json')):
+            self.show_error("Invalid file type",
+                           "Please select a .moc3 or .model3.json Live2D model file.")
             return
 
         # 更新当前模型
         self.current_model_path = file_path
-        self.model_info_text_box.setMarkdown(f"### Model:\n #### {os.path.basename(file_path)}🏆")
+
+        # 显示模型信息
+        model_name = os.path.basename(file_path)
+        model_dir = os.path.dirname(file_path)
+
+        info_text = f"""### Model Loaded ✨
+
+**File:** `{model_name}`
+
+**Directory:** `{model_dir}`
+
+**Type:** {'Live2D Model v3 (.moc3)' if file_ext.endswith('.moc3') else 'Live2D Config (.model3.json)'}
+
+Ready to preview! 🚀"""
+
+        self.model_info_text_box.setMarkdown(info_text)
         self.preview_btn.setEnabled(True)
 
         # 显示成功信息
         InfoBar.success(
             title="Model Loaded",
-            content=f"Successfully loaded: {os.path.basename(file_path)}",
+            content=f"Successfully loaded: {model_name}",
             orient=Qt.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,
