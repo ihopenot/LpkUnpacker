@@ -72,7 +72,7 @@ class DragDropArea(QFrame):
                 if file_path.endswith('.moc3') or file_path.endswith('.model3.json'):
                     event.acceptProposedAction()
                     self.setStyleSheet("""
-                        DragDropArea {
+                        #dragDropArea {
                             border: 2px solid #007ACC;
                             border-radius: 10px;
                             background-color: transparent;
@@ -84,12 +84,12 @@ class DragDropArea(QFrame):
     def dragLeaveEvent(self, event):
         """拖拽离开事件"""
         self.setStyleSheet("""
-            DragDropArea {
+            #dragDropArea {
                 border: 2px dashed #ccc;
                 border-radius: 10px;
                 background-color: transparent;
             }
-            DragDropArea:hover {
+            #dragDropArea:hover {
                 border-color: #007ACC;
                 background-color: transparent;
             }
@@ -123,6 +123,9 @@ class DragDropArea(QFrame):
 class Live2DSettingsPanel(QFrame):
     """Live2D设置面板"""
 
+    settingsChanged = pyqtSignal(dict)
+    requestRefreshParams = pyqtSignal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -132,11 +135,10 @@ class Live2DSettingsPanel(QFrame):
         self.height_spinbox = None
         self.opacity_label = None
         self.opacity_slider = None
-        # self.stay_on_top_check = None
         self.show_controls_check = None
 
-        self.scale_label = None
-        self.scale_slider = None
+        self.rotation_label = None
+        self.rotation_slider = None
         self.position_x_spinbox = None
         self.position_y_spinbox = None
         self.bg_transparent_check = None
@@ -150,6 +152,15 @@ class Live2DSettingsPanel(QFrame):
         self.auto_breath_check = None
         self.sensitivity_label = None
         self.sensitivity_slider = None
+
+        # 高级参数控件（动态）
+        self.advanced_enable_check = None
+        self.advanced_param_sliders = {}  # id -> (slider, label, scale)
+        self.PARAM_SPECS = []  # filled dynamically from model meta
+        self.param_specs_by_id = {}  # id -> spec dict
+        self.advanced_group = None
+        self.adv_params_container = None
+        self.adv_params_container_layout = None
 
         self.setupUI()
 
@@ -175,6 +186,11 @@ class Live2DSettingsPanel(QFrame):
         # 交互设置组
         interaction_group = self.create_interaction_settings_group()
         scroll_layout.addWidget(interaction_group)
+
+        # 高级设置组（动态构建）
+        advanced_group = self.create_advanced_settings_group()
+        self.advanced_group = advanced_group
+        scroll_layout.addWidget(advanced_group)
 
         # 添加弹性空间
         scroll_layout.addStretch()
@@ -208,7 +224,7 @@ class Live2DSettingsPanel(QFrame):
 
         self.height_spinbox = SpinBox(group)
         self.height_spinbox.setRange(200, 1080)
-        self.height_spinbox.setValue(600)
+        self.height_spinbox.setValue(300)
         self.height_spinbox.setSuffix(" px")
 
         size_layout.addWidget(BodyLabel("H:", group))
@@ -252,46 +268,25 @@ class Live2DSettingsPanel(QFrame):
         group_title = SubtitleLabel("Model Display Settings", group)
         layout.addWidget(group_title)
 
-        # 模型缩放
-        scale_layout = QHBoxLayout()
-        scale_layout.addWidget(BodyLabel("Model Scale:", group))
+        # 模型旋转
+        rotation_layout = QHBoxLayout()
+        rotation_layout.addWidget(BodyLabel("Model Rotation:", group))
 
-        self.scale_slider = Slider(Qt.Horizontal, group)
-        self.scale_slider.setRange(50, 200)
-        self.scale_slider.setValue(100)
+        self.rotation_slider = Slider(Qt.Horizontal, group)
+        self.rotation_slider.setRange(0, 360)
+        self.rotation_slider.setValue(0)
 
-        self.scale_label = BodyLabel("100%", group)
-        self.scale_label.setMinimumWidth(40)
+        self.rotation_label = BodyLabel("0°", group)
+        self.rotation_label.setMinimumWidth(40)
 
-        self.scale_slider.valueChanged.connect(
-            lambda v: self.scale_label.setText(f"{v}%")
+        self.rotation_slider.valueChanged.connect(
+            lambda v: self.rotation_label.setText(f"{v}°")
         )
 
-        scale_layout.addWidget(self.scale_slider)
-        scale_layout.addWidget(self.scale_label)
+        rotation_layout.addWidget(self.rotation_slider)
+        rotation_layout.addWidget(self.rotation_label)
 
-        layout.addLayout(scale_layout)
-
-        # 模型位置偏移
-        position_layout = QHBoxLayout()
-        position_layout.addWidget(BodyLabel("Position Offset:", group))
-
-        position_layout.addWidget(BodyLabel("X:", group))
-        self.position_x_spinbox = SpinBox(group)
-        self.position_x_spinbox.setRange(-500, 500)
-        self.position_x_spinbox.setValue(0)
-        self.position_x_spinbox.setSuffix(" px")
-        position_layout.addWidget(self.position_x_spinbox)
-
-        position_layout.addWidget(BodyLabel("Y:", group))
-        self.position_y_spinbox = SpinBox(group)
-        self.position_y_spinbox.setRange(-500, 500)
-        self.position_y_spinbox.setValue(0)
-        self.position_y_spinbox.setSuffix(" px")
-        position_layout.addWidget(self.position_y_spinbox)
-        position_layout.addStretch()
-
-        layout.addLayout(position_layout)
+        layout.addLayout(rotation_layout)
 
         # 背景设置
         bg_layout = QHBoxLayout()
@@ -304,7 +299,7 @@ class Live2DSettingsPanel(QFrame):
         # 颜色选择按钮
         self.bg_color_btn = PushButton("Select Color", group)
         self.bg_color_btn.setEnabled(False)
-        self.bg_color_btn.clicked.connect(self.open_color_dialog)
+        # self.bg_color_btn.clicked.connect(self.open_color_dialog)
         bg_layout.addWidget(self.bg_color_btn)
 
         # 颜色预览块
@@ -335,7 +330,7 @@ class Live2DSettingsPanel(QFrame):
         group_title = SubtitleLabel("Interaction Settings", group)
         layout.addWidget(group_title)
 
-        # 鼠标交互选项
+        # 交互选项
         self.mouse_tracking_check = CheckBox("Enable mouse tracking", group)
         self.mouse_tracking_check.setChecked(True)
         layout.addWidget(self.mouse_tracking_check)
@@ -348,63 +343,174 @@ class Live2DSettingsPanel(QFrame):
         self.auto_breath_check.setChecked(True)
         layout.addWidget(self.auto_breath_check)
 
-        # 交互灵敏度
-        sensitivity_layout = QHBoxLayout()
-        sensitivity_layout.addWidget(BodyLabel("Mouse Sensitivity:", group))
+        return group
 
-        self.sensitivity_slider = Slider(Qt.Horizontal, group)
-        self.sensitivity_slider.setRange(1, 10)
-        self.sensitivity_slider.setValue(5)
+    def create_advanced_settings_group(self):
+        """创建高级设置组的容器；具体参数根据模型动态生成"""
+        group = CardWidget(self)
+        layout = QVBoxLayout(group)
+        layout.setContentsMargins(15, 15, 15, 15)
 
-        self.sensitivity_label = BodyLabel("5", group)
-        self.sensitivity_label.setMinimumWidth(20)
+        title = SubtitleLabel("Advanced Parameters (Live2D)", group)
+        layout.addWidget(title)
 
-        self.sensitivity_slider.valueChanged.connect(
-            lambda v: self.sensitivity_label.setText(str(v))
-        )
+        self.advanced_enable_check = CheckBox("Enable advanced parameter overrides", group)
+        self.advanced_enable_check.setChecked(False)
+        self.advanced_enable_check.toggled.connect(lambda _: self._emit_settings())
+        layout.addWidget(self.advanced_enable_check)
 
-        sensitivity_layout.addWidget(self.sensitivity_slider)
-        sensitivity_layout.addWidget(self.sensitivity_label)
+        # 容器用于放置动态参数滑条
+        self.adv_params_container = QWidget(group)
+        self.adv_params_container_layout = QVBoxLayout(self.adv_params_container)
+        self.adv_params_container_layout.setContentsMargins(0, 0, 0, 0)
+        self.adv_params_container_layout.setSpacing(8)
+        layout.addWidget(self.adv_params_container)
 
-        layout.addLayout(sensitivity_layout)
+        # Buttons row
+        btns_layout = QHBoxLayout()
+        refresh_btn = PushButton("Refresh From Current Model", group)
+        refresh_btn.clicked.connect(self.requestRefreshParams.emit)
+        reset_btn = PushButton("Reset Advanced Params", group)
+        reset_btn.clicked.connect(self.reset_advanced_params)
+        btns_layout.addStretch()
+        btns_layout.addWidget(refresh_btn)
+        btns_layout.addWidget(reset_btn)
+        layout.addLayout(btns_layout)
 
         return group
 
-    def open_color_dialog(self):
-        """打开颜色选择器并更新所选颜色"""
-        dlg = ColorDialog(self.selected_bg_color, "Choose Background Color", self, enableAlpha=False)
-        # 实时更新预览
-        dlg.colorChanged.connect(self._update_selected_color)
+    def _emit_settings(self):
+        try:
+            self.settingsChanged.emit(self.get_settings())
+        except Exception:
+            pass
 
-        if dlg.exec_():
-            # 确认后取最终颜色（若无 color 属性则尝试其他兼容属性/方法）
-            color = getattr(dlg, 'color', None)
+    def reset_advanced_params(self):
+        """将高级参数重置为当前模型的默认值"""
+        # Use current specs to reset
+        for spec in self.PARAM_SPECS:
+            sid = spec['id']
+            if sid in self.advanced_param_sliders:
+                slider, _label, scale = self.advanced_param_sliders[sid]
+                dv = float(spec.get('default', 0.0))
+                dv = max(spec.get('min', dv), min(spec.get('max', dv), dv))
+                slider.setValue(int(round(dv * scale)))
 
-            if isinstance(color, QColor):
-                self._update_selected_color(color)
+    def _clear_layout(self, layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.deleteLater()
+            child = item.layout()
+            if child is not None:
+                self._clear_layout(child)
 
-    def _update_selected_color(self, color: QColor):
-        self.selected_bg_color = color
-        # 更新预览块背景
-        self.bg_color_preview.setStyleSheet(
-            f"QFrame{{border:1px solid #ccc; border-radius:4px; background:{self.selected_bg_color.name()};}}"
-        )
+    def rebuild_advanced_params(self, meta_list: list):
+        """依据模型枚举到的参数元数据动态重建高级设置UI.
+        meta: list of {id, type, value, min, max, default}
+        尽可能保留用户当前已设定的值。
+        """
+        # Preserve existing values when possible
+        prev_values = {}
+        for pid, (slider, _lbl, scale) in self.advanced_param_sliders.items():
+            prev_values[pid] = slider.value() / float(scale)
+
+        # Clear container and internal maps
+        self._clear_layout(self.adv_params_container_layout)
+        self.advanced_param_sliders.clear()
+        self.PARAM_SPECS = []
+        self.param_specs_by_id.clear()
+
+        # Heuristic scale: fine-grain for [-1,1] and [0,1], else 1
+        def decide_scale(vmin, vmax):
+            rng = max(vmax, vmin) - min(vmax, vmin)
+            if rng <= 2.0:
+                return 100
+            return 1
+
+        # Build controls in alphabetical order by id for consistency
+        for p in sorted(meta_list, key=lambda x: str(x.get('id', ''))):
+            pid = str(p.get('id', ''))
+            pmin = float(p.get('min', 0.0))
+            pmax = float(p.get('max', 1.0))
+            pdef = float(p.get('default', 0.0))
+            pval = float(p.get('value', pdef))
+            scale = decide_scale(pmin, pmax)
+            spec = {
+                'label': pid,
+                'id': pid,
+                'min': pmin,
+                'max': pmax,
+                'default': pdef,
+                'scale': scale,
+            }
+            self.PARAM_SPECS.append(spec)
+            self.param_specs_by_id[pid] = spec
+
+            row = QHBoxLayout()
+            name_label = BodyLabel(f"{pid}:", self.adv_params_container)
+            row.addWidget(name_label)
+
+            slider = Slider(Qt.Horizontal, self.adv_params_container)
+            s_min = int(round(pmin * scale))
+            s_max = int(round(pmax * scale))
+            # Ensure s_min <= s_max
+            if s_min > s_max:
+                s_min, s_max = s_max, s_min
+            slider.setRange(s_min, s_max)
+
+            # Initial value: keep previous if exists, else model default/value
+            init_val = prev_values.get(pid, pval)
+            init_val = max(pmin, min(pmax, init_val))
+            slider.setValue(int(round(init_val * scale)))
+
+            val_label = BodyLabel(f"{init_val:.2f}" if scale != 1 else f"{int(round(init_val))}", self.adv_params_container)
+            val_label.setMinimumWidth(80)
+
+            def make_on_change(lbl, scale_factor):
+                return lambda v: lbl.setText(f"{v/scale_factor:.2f}") if scale_factor != 1 else lbl.setText(f"{v}")
+
+            slider.valueChanged.connect(make_on_change(val_label, scale))
+            slider.valueChanged.connect(lambda _v: self._emit_settings())
+
+            row.addWidget(slider)
+            row.addWidget(val_label)
+            row.addStretch()
+
+            self.adv_params_container_layout.addLayout(row)
+            self.advanced_param_sliders[pid] = (slider, val_label, scale)
 
     def get_settings(self):
         """获取当前设置"""
-        return {
+        settings = {
             'window_size': (self.width_spinbox.value(), self.height_spinbox.value()),
             'opacity': self.opacity_slider.value() / 100.0,
             'show_controls': self.show_controls_check.isChecked(),
-            'model_scale': self.scale_slider.value() / 100.0,
-            'position_offset': (self.position_x_spinbox.value(), self.position_y_spinbox.value()),
+            'model_rotation': self.rotation_slider.value(),
             'transparent_bg': self.bg_transparent_check.isChecked(),
             'bg_color': self.selected_bg_color,
             'mouse_tracking': self.mouse_tracking_check.isChecked(),
-            'mouse_drag': self.mouse_drag_check.isChecked(),
+            'auto_blink': self.auto_blink_check.isChecked(),
             'auto_breath': self.auto_breath_check.isChecked(),
-            'sensitivity': self.sensitivity_slider.value()
         }
+        # 高级参数
+        adv_enabled = bool(self.advanced_enable_check.isChecked()) if self.advanced_enable_check else False
+        settings['advanced_enabled'] = adv_enabled
+        if adv_enabled:
+            advanced_params = {}
+            for pid, (slider, _label, scale) in self.advanced_param_sliders.items():
+                spec = self.param_specs_by_id.get(pid, None)
+                val = slider.value() / float(scale)
+                if spec:
+                    v = max(spec['min'], min(spec['max'], val))
+                else:
+                    v = val
+                advanced_params[pid] = v
+            settings['advanced_params'] = advanced_params
+        else:
+            settings['advanced_params'] = {}
+        return settings
 
 class PreviewPage(QFrame):
     def __init__(self, parent=None):
@@ -423,7 +529,7 @@ class PreviewPage(QFrame):
         self.setupUI()
 
         # 响应窗口大小变化
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
     def setupUI(self):
         # Main layout
@@ -476,6 +582,9 @@ class PreviewPage(QFrame):
 
         # 右侧：设置面板
         self.settings_panel = Live2DSettingsPanel(self)
+        # Connect live update signals
+        self.settings_panel.settingsChanged.connect(self.on_settings_changed)
+        self.settings_panel.requestRefreshParams.connect(self.on_request_refresh_params)
 
         # 添加到分割器
         splitter.addWidget(left_widget)
@@ -539,18 +648,16 @@ Ready to preview! 🚀"""
             self.show_error("No model selected", "Please drag and drop a .moc3 file first.")
             return
 
-        # 获取设置
-        settings = self.settings_panel.get_settings()
-
         # 创建预览窗口
-        preview_window = Live2DPreviewWindow(self.current_model_path, self)
+        preview_window = Live2DPreviewWindow(self.current_model_path)
 
-        # 应用设置
-        preview_window.apply_settings(settings)
-
-        # 显示控制面板
-        if settings['show_controls']:
-            preview_window.toggle_control_panel()
+        # 通过预览窗口枚举参数并重建高级设置UI
+        try:
+            meta = preview_window.live2d_canvas.getParameterMetaList() if preview_window.live2d_canvas else []
+            if hasattr(self.settings_panel, 'rebuild_advanced_params'):
+                self.settings_panel.rebuild_advanced_params(meta)
+        except Exception:
+            pass
 
         # 连接关闭信号
         preview_window.closed.connect(lambda: self.on_preview_window_closed(preview_window))
@@ -558,6 +665,14 @@ Ready to preview! 🚀"""
         # 添加到窗口列表并显示
         self.preview_windows.append(preview_window)
         preview_window.show()
+
+        # 获取（可能被重建后的）设置并应用
+        settings = self.settings_panel.get_settings()
+        preview_window.apply_settings(settings)
+
+        # 显示控制面板
+        if settings['show_controls']:
+            preview_window.toggle_control_panel()
 
     def on_preview_window_closed(self, window):
         """预览窗口关闭处理"""
@@ -581,3 +696,22 @@ Ready to preview! 🚀"""
             duration=3000,
             parent=self
         )
+
+    def on_settings_changed(self, settings: dict):
+        """Apply updated settings to all open preview windows (live updates)"""
+        for w in self.preview_windows:
+            try:
+                w.apply_settings(settings)
+            except Exception:
+                continue
+
+    def on_request_refresh_params(self):
+        """Re-enumerate parameters from the latest opened preview window and rebuild UI"""
+        if not self.preview_windows:
+            return
+        latest = self.preview_windows[-1]
+        try:
+            meta = latest.live2d_canvas.getParameterMetaList() if latest.live2d_canvas else []
+            self.settings_panel.rebuild_advanced_params(meta)
+        except Exception:
+            pass

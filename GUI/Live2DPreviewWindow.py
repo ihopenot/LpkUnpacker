@@ -1,11 +1,8 @@
 import os
 import sys
-from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                             QPushButton, QSlider, QCheckBox, QColorDialog,
-                             QGroupBox, QSpinBox, QApplication, QFrame)
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QPoint
-from PyQt5.QtGui import QColor, QPalette, QMouseEvent, QPaintEvent, QFont
-from qfluentwidgets import (PushButton, Slider, CheckBox, SubtitleLabel, BodyLabel, SpinBox)
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QApplication)
+from PyQt5.QtCore import pyqtSignal, QPoint, Qt
+from qfluentwidgets import (PushButton, Slider, SubtitleLabel, BodyLabel)
 from qfluentwidgets import CardWidget
 
 from GUI.Live2DCanvas import Live2DCanvas
@@ -16,34 +13,27 @@ class Live2DPreviewWindow(QWidget):
 
     closed = pyqtSignal()  # 窗口关闭信号
 
-    def __init__(self, model_path=None, parent=None):
-        super().__init__(parent)
+    def __init__(self, model_path=None):
+        super().__init__()
         self.model_path = model_path
-        self.live2d_widget = None
+        self.live2d_canvas = None
+        self.control_panel = None
         self.dragging = False
         self.drag_position = QPoint()
 
         # 设置无边框窗口
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setStyleSheet("""
-            Live2DPreviewWindow {
-                border: 2px solid rgba(255, 255, 255, 0.3);
-                border-radius: 10px;
-                background: transparent;
-            }
-        """)
+        self.setWindowFlag(Qt.FramelessWindowHint, True)
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
+        self.setWindowFlag(Qt.Tool, True)
+        # Use explicit enum for linter friendliness
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         # 设置窗口大小和位置
-        self.resize(400, 600)
+        self.resize(400, 300)
         self.move_to_screen_center()
 
         # 初始化UI
         self.setup_ui()
-
-        # # 加载模型
-        # if model_path and os.path.exists(model_path):
-        #     self.load_model(model_path)
 
 
     def setup_ui(self):
@@ -52,22 +42,25 @@ class Live2DPreviewWindow(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # 创建Live2D显示区域
-        # self.live2d_widget = Live2DWidget(self)
-        #
-        # # 设置Live2D widget样式
-        # self.live2d_widget.setStyleSheet("""
-        #     Live2DWidget {
-        #         background: transparent;
-        #         border: 2px solid rgba(255, 255, 255, 0.3);
-        #         border-radius: 10px;
-        #     }
-        #     Live2DWidget:hover {
-        #         border: 2px solid rgba(255, 255, 255, 0.5);
-        #     }
-        # """)
-        #
-        # layout.addWidget(self.live2d_widget)
+        if self.model_path and os.path.exists(self.model_path):
+            # 创建Live2D显示区域
+            self.live2d_canvas = Live2DCanvas(self.model_path)
+        else:
+            self.live2d_canvas = Live2DCanvas("./runtime/hiyori_free_t08.model3.json")
+
+        # 设置Live2D widget样式
+        self.live2d_canvas.setStyleSheet("""
+            Live2DCanvas {
+                background: transparent;
+                border: 2px solid rgba(255, 255, 255, 0.3);
+                border-radius: 10px;
+            }
+            Live2DCanvas:hover {
+                border: 2px solid rgba(255, 255, 255, 0.5);
+            }
+        """)
+
+        layout.addWidget(self.live2d_canvas)
 
         # 创建控制面板（可隐藏）
         self.control_panel = self.create_control_panel()
@@ -138,20 +131,41 @@ class Live2DPreviewWindow(QWidget):
 
         # 应用窗口设置
         if 'window_size' in settings:
-            self.resize(*settings['window_size'])
+            w, h = settings['window_size']
+            try:
+                self.resize(int(w), int(h))
+            except Exception:
+                self.resize(w, h)
 
-        if 'opacity' in settings:
-            self.setWindowOpacity(settings['opacity'])
-            if self.live2d_widget:
-                self.live2d_widget.setCanvasOpacity(settings['opacity'])
+        # 画布透明度（模型不透明度）
+        if 'opacity' in settings and self.live2d_canvas:
+            self.live2d_canvas.setCanvasOpacity(settings['opacity'])
 
-        # 应用鼠标交互设置
-        if self.live2d_widget and all(key in settings for key in ['mouse_tracking', 'mouse_drag', 'sensitivity']):
-            self.live2d_widget.set_mouse_settings(
-                tracking_enabled=settings['mouse_tracking'],
-                drag_enabled=settings['mouse_drag'],
-                sensitivity=settings['sensitivity'] / 5.0  # 将1-10范围转换为0.2-2.0
-            )
+        # 模型旋转
+        if 'model_rotation' in settings and self.live2d_canvas:
+            self.live2d_canvas.setRotationAngle(settings['model_rotation'])
+
+        # 背景透明/颜色
+        if self.live2d_canvas and ('transparent_bg' in settings or 'bg_color' in settings):
+            transparent = bool(settings.get('transparent_bg', True))
+            qcolor = settings.get('bg_color')
+            self.live2d_canvas.setBackground(transparent, qcolor)
+
+        # 鼠标跟踪
+        if 'mouse_tracking' in settings and self.live2d_canvas:
+            self.live2d_canvas.setMouseTracking(bool(settings['mouse_tracking']))
+
+        # 自动眨眼/呼吸
+        if 'auto_blink' in settings and self.live2d_canvas:
+            self.live2d_canvas.setAutoBlinkEnable(bool(settings['auto_blink']))
+        if 'auto_breath' in settings and self.live2d_canvas:
+            self.live2d_canvas.setAutoBreathEnable(bool(settings['auto_breath']))
+
+        # 高级参数
+        if self.live2d_canvas and ('advanced_enabled' in settings or 'advanced_params' in settings):
+            enabled = bool(settings.get('advanced_enabled', False))
+            params = settings.get('advanced_params', {}) or {}
+            self.live2d_canvas.setAdvancedParams(enabled, params)
 
     def toggle_control_panel(self):
         """切换控制面板显示/隐藏"""
@@ -159,19 +173,18 @@ class Live2DPreviewWindow(QWidget):
             self.control_panel.setVisible(False)
             self.toggle_controls_btn.setText("Show Controls")
             # 调整窗口大小
-            self.resize(self.width(), self.live2d_widget.height() + 20)
+            self.resize(self.width(), self.height() - self.control_panel.height())
         else:
             self.control_panel.setVisible(True)
             self.toggle_controls_btn.setText("Hide Controls")
             # 调整窗口大小
-            self.resize(self.width(), self.live2d_widget.height() + self.control_panel.height() + 20)
+            self.resize(self.width(), self.height() + self.control_panel.height())
 
     def on_opacity_changed(self, value):
         """透明度变化处理"""
         opacity = value / 100.0
-        self.setWindowOpacity(opacity)
-        if self.live2d_widget:
-            self.live2d_widget.setCanvasOpacity(opacity)
+        if self.live2d_canvas:
+            self.live2d_canvas.setCanvasOpacity(opacity)
 
     def mousePressEvent(self, event):
         """鼠标按下事件 - 用于拖拽窗口"""
@@ -192,13 +205,7 @@ class Live2DPreviewWindow(QWidget):
             self.move(event.globalPos() - self.drag_position)
             event.accept()
         else:
-            # 将鼠标事件传递给Live2D widget
-            if self.live2d_widget:
-                relative_pos = self.live2d_widget.mapFromParent(event.pos())
-                if self.live2d_widget.rect().contains(relative_pos):
-                    new_event = QMouseEvent(event.type(), relative_pos, event.button(),
-                                          event.buttons(), event.modifiers())
-                    self.live2d_widget.mouseMoveEvent(new_event)
+            pass
 
     def mouseReleaseEvent(self, event):
         """鼠标释放事件"""
@@ -220,8 +227,8 @@ class Live2DPreviewWindow(QWidget):
 
     def closeEvent(self, event):
         """窗口关闭事件"""
-        if self.live2d_widget:
-            self.live2d_widget.release()
+        if self.live2d_canvas:
+            self.live2d_canvas.release()
         self.closed.emit()
         super().closeEvent(event)
 
@@ -229,3 +236,18 @@ class Live2DPreviewWindow(QWidget):
         """右键菜单事件"""
         # 可以在这里添加右键菜单功能
         pass
+
+if __name__ == "__main__":
+    from PyQt5.QtCore import Qt, QCoreApplication
+
+    # Use ApplicationAttribute enum for clarity
+    QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
+    QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
+    QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
+    app = QApplication(sys.argv)
+    window = Live2DPreviewWindow()
+    window.show()
+
+    window2 = Live2DPreviewWindow()
+    window2.show()
+    sys.exit(app.exec_())

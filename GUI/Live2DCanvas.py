@@ -1,16 +1,17 @@
-import sys
 import math
 import numpy as np
 from typing import Optional
 
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtWidgets import QOpenGLWidget, QApplication
+from PyQt5.QtWidgets import QOpenGLWidget
+from PyQt5.QtCore import Qt
 import OpenGL.GL as GL
 from abc import abstractmethod
 
 import live2d.v3 as live2d
 from live2d.utils.canvas import Canvas
 
+
+live2d.init()
 
 def compile_shader(shader_src, shader_type):
     shader = GL.glCreateShader(shader_type)
@@ -84,6 +85,15 @@ class ADPOpenGLCanvas(QOpenGLWidget):
         super().__init__()
         self.__canvas_opacity = 1.0
         self.__rotation_angle = 0.0
+        # Background control
+        self.__use_background = False
+        self.__bg_color = (0.0, 0.0, 0.0, 0.0)
+        # High-DPI handling
+        self._dpr = 1.0
+        self._canvas_framebuffer = None
+        self._canvas_texture = None
+        self._fbo_width = 0
+        self._fbo_height = 0
 
     def __create_program(self):
         vertex_shader = """#version 330 core
@@ -108,16 +118,26 @@ class ADPOpenGLCanvas(QOpenGLWidget):
         in vec2 v_texCoord;
         uniform sampler2D canvas;
         uniform float opacity;
+        uniform vec4 bg_color;
+        uniform int use_bg; // 0 or 1
 
         void main() {
             vec4 color = texture(canvas, v_texCoord);
             color *= opacity;
-            gl_FragColor = color;
+            if (use_bg == 1) {
+                // Alpha composite over solid background
+                vec3 rgb = mix(bg_color.rgb, color.rgb, color.a);
+                gl_FragColor = vec4(rgb, 1.0);
+            } else {
+                gl_FragColor = color;
+            }
         }
         """
         self._program = create_program(vertex_shader, frag_shader)
         self._opacity_loc = GL.glGetUniformLocation(self._program, "opacity")
         self._rotation_angle_loc = GL.glGetUniformLocation(self._program, "rotation_angle")
+        self._bg_color_loc = GL.glGetUniformLocation(self._program, "bg_color")
+        self._use_bg_loc = GL.glGetUniformLocation(self._program, "use_bg")
 
     def __create_vao(self):
         vertices = np.array([
@@ -140,12 +160,43 @@ class ADPOpenGLCanvas(QOpenGLWidget):
         ], dtype=np.float32)
         self._vao = create_vao(vertices, uvs)
 
+    def __delete_canvas_framebuffer(self):
+        if self._canvas_texture:
+            try:
+                GL.glDeleteTextures([self._canvas_texture])
+            except Exception:
+                pass
+            self._canvas_texture = None
+        if self._canvas_framebuffer:
+            try:
+                GL.glDeleteFramebuffers(1, [self._canvas_framebuffer])
+            except Exception:
+                pass
+            self._canvas_framebuffer = None
+
     def __create_canvas_framebuffer(self):
-        self._canvas_framebuffer, self._canvas_texture = create_canvas_framebuffer(self.width(), self.height())
+        # Determine device-pixel size for FBO
+        self._dpr = float(self.devicePixelRatioF()) if hasattr(self, 'devicePixelRatioF') else float(self.devicePixelRatio())
+        fb_w = max(1, int(math.ceil(self.width() * self._dpr)))
+        fb_h = max(1, int(math.ceil(self.height() * self._dpr)))
+        # Recreate only if size changed
+        if self._canvas_framebuffer and (fb_w == self._fbo_width and fb_h == self._fbo_height):
+            return
+        # Delete old
+        self.__delete_canvas_framebuffer()
+        # Create new
+        self._canvas_framebuffer, self._canvas_texture = create_canvas_framebuffer(fb_w, fb_h)
+        self._fbo_width, self._fbo_height = fb_w, fb_h
 
     def __draw_on_canvas(self):
+        # Draw model into offscreen FBO at device-pixel resolution
         old_fbo = GL.glGetIntegerv(GL.GL_FRAMEBUFFER_BINDING)
         GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, self._canvas_framebuffer)
+        # Ensure viewport matches FBO size
+        GL.glViewport(0, 0, int(self._fbo_width), int(self._fbo_height))
+        # Keep FBO transparent so compositing in second pass works
+        GL.glClearColor(0.0, 0.0, 0.0, 0.0)
+        GL.glClear(GL.GL_COLOR_BUFFER_BIT)
         self.on_draw()
         GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, old_fbo)
 
@@ -154,20 +205,39 @@ class ADPOpenGLCanvas(QOpenGLWidget):
         self.__create_vao()
         self.__create_canvas_framebuffer()
         self.on_init()
+        # Ensure model has correct initial size in pixels
+        self.on_resize(self._fbo_width, self._fbo_height)
 
     def resizeGL(self, w, h):
-        self.on_resize(w, h)
+        # Recreate FBO when widget size or DPR changes
+        old_dpr = self._dpr
+        self._dpr = float(self.devicePixelRatioF()) if hasattr(self, 'devicePixelRatioF') else float(self.devicePixelRatio())
+        if (int(math.ceil(w * self._dpr)) != self._fbo_width) or (int(math.ceil(h * self._dpr)) != self._fbo_height) or (self._dpr != old_dpr):
+            self.__create_canvas_framebuffer()
+        # Notify subclass with pixel sizes
+        self.on_resize(self._fbo_width, self._fbo_height)
 
     def paintGL(self):
+        # First render to offscreen canvas
         self.__draw_on_canvas()
+        # Then draw the canvas texture to the widget's default framebuffer
+        # Clear to transparent; background color compositing is handled in shader
         GL.glClearColor(0.0, 0.0, 0.0, 0.0)
         GL.glClear(GL.GL_COLOR_BUFFER_BIT)
+
+        # Ensure viewport matches default framebuffer size in pixels (HiDPI safe)
+        dpr = float(self.devicePixelRatioF()) if hasattr(self, 'devicePixelRatioF') else float(self.devicePixelRatio())
+        vp_w = max(1, int(round(self.width() * dpr)))
+        vp_h = max(1, int(round(self.height() * dpr)))
+        GL.glViewport(0, 0, vp_w, vp_h)
 
         GL.glBindVertexArray(self._vao)
         GL.glUseProgram(self._program)
 
         GL.glProgramUniform1f(self._program, self._opacity_loc, self.__canvas_opacity)
         GL.glProgramUniform1f(self._program, self._rotation_angle_loc, self.__rotation_angle)
+        GL.glProgramUniform4f(self._program, self._bg_color_loc, *self.__bg_color)
+        GL.glProgramUniform1i(self._program, self._use_bg_loc, 1 if self.__use_background else 0)
 
         GL.glActiveTexture(GL.GL_TEXTURE0)
         GL.glBindTexture(GL.GL_TEXTURE_2D, self._canvas_texture)
@@ -177,9 +247,54 @@ class ADPOpenGLCanvas(QOpenGLWidget):
 
     def setCanvasOpacity(self, value):
         self.__canvas_opacity = value
+        self.update()
 
     def setRotationAngle(self, angle):
-        self.__rotation_angle = angle
+        self.__rotation_angle = float(angle)
+        self.update()
+
+    def setBackground(self, transparent: bool, qcolor):
+        """Configure background compositing.
+        If transparent is True, the widget remains transparent.
+        Otherwise, fill with the provided QColor.
+        """
+        self.__use_background = not bool(transparent)
+        if qcolor is not None:
+            # QColor -> normalized RGBA
+            r, g, b, a = qcolor.redF(), qcolor.greenF(), qcolor.blueF(), 1.0
+            self.__bg_color = (r, g, b, a)
+        else:
+            self.__bg_color = (0.0, 0.0, 0.0, 1.0)
+        self.update()
+
+    # Advanced params API
+    def setAdvancedParams(self, enabled: bool, params: dict):
+        self._advanced_enabled = bool(enabled)
+        self._advanced_params = dict(params) if params else {}
+        # Apply immediately using SetParameterValue when available
+        if self._advanced_enabled and self._advanced_params and self.model is not None:
+            set_val = getattr(self.model, "SetParameterValue", None)
+            if callable(set_val):
+                for pid, v in self._advanced_params.items():
+                    try:
+                        set_val(pid, float(v))
+                    except Exception:
+                        continue
+        self.update()
+
+    def _apply_advanced_params(self):
+        m = self.model
+        if m is None or not self._advanced_params:
+            return
+        set_val = getattr(m, "SetParameterValue", None)
+        if not callable(set_val):
+            # If API not available, do nothing to honor request of using SetParameterValue
+            return
+        for pid, v in self._advanced_params.items():
+            try:
+                set_val(pid, float(v))
+            except Exception:
+                continue
 
     @abstractmethod
     def on_init(self):
@@ -196,43 +311,31 @@ class ADPOpenGLCanvas(QOpenGLWidget):
 
 
 class Live2DCanvas(ADPOpenGLCanvas):
-    def __init__(self):
+    def __init__(self, model_path = None):
         super().__init__()
+        self.model_path = model_path
         self.model: Optional[live2d.LAppModel] = None
-
         # tool for controlling model opacity
         self.canvas: Optional[Canvas] = None
-
         self.setWindowTitle("Live2DCanvas")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.radius_per_frame = math.pi * 0.5 / 120
         self.total_radius = 0
+        # Mouse follow control
+        self._mouse_follow_enabled = False
+        # Advanced parameter overrides
+        self._advanced_enabled = False
+        self._advanced_params = {}
 
     def on_init(self):
-        live2d.glewInit()
+        live2d.glInit()
         self.model = live2d.LAppModel()
-        if live2d.LIVE2D_VERSION == 3:
-            self.model.LoadModelJson(r"C:\Users\yorkj\Downloads\Compressed\hiyori_free_zh\hiyori_free_zh\runtime\hiyori_free_t08.model3.json")
-        else:
-            self.model.LoadModelJson("resources/v2/kasumi2/kasumi2.model.json")
-
-        self.model.SetAutoBlinkEnable(False)
-        self.model.SetAutoBreathEnable(True)
-        self.model.SetScale(0.8)
-
+        self.model.LoadModelJson(self.model_path)
         # must be created after opengl context is configured
         self.canvas = Canvas()
-
         self.startTimer(int(1000 / 120))
 
     def timerEvent(self, a0):
-        self.total_radius += self.radius_per_frame
-        v = abs(math.cos(self.total_radius))
-
-        # change opacity
-        self.setCanvasOpacity(v)
-        # self.setRotationAngle(v*360)
-
         self.update()
 
     def on_draw(self):
@@ -240,11 +343,144 @@ class Live2DCanvas(ADPOpenGLCanvas):
         self.model.Update()
         self.model.Draw()
 
-if __name__ == '__main__':
-    live2d.init()
-    app = QApplication(sys.argv)
-    win = Live2DCanvas()
-    win.setMouseTracking(True)
-    win.show()
-    app.exec()
-    live2d.dispose()
+    def on_resize(self, width: int, height: int):
+        self.model.Resize(width, height)
+
+    # --- Mouse tracking and follow implementation ---
+    def setMouseTracking(self, enable: bool) -> None:  # type: ignore[override]
+        super().setMouseTracking(bool(enable))
+        self._mouse_follow_enabled = bool(enable)
+
+    def mouseMoveEvent(self, event):
+        if not self._mouse_follow_enabled or self.model is None:
+            return super().mouseMoveEvent(event)
+        w = max(1, self.width())
+        h = max(1, self.height())
+        px = event.pos().x()
+        py = event.pos().y()
+        # Normalize to [-1, 1], origin center, +x right, +y up
+        nx = (px / w - 0.5) * 2.0
+        ny = (0.5 - py / h) * 2.0
+        self._apply_mouse_follow(nx, ny)
+        self.update()
+        return super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event):
+        # Reset follow when cursor leaves
+        if self._mouse_follow_enabled and self.model is not None:
+            try:
+                self._apply_mouse_follow(0.0, 0.0)
+            except Exception:
+                pass
+        return super().leaveEvent(event)
+
+    def _apply_mouse_follow(self, nx: float, ny: float):
+        """Try multiple strategies to apply mouse-follow to the model.
+        nx/ny: normalized [-1, 1].
+        Priority: SetDrag/SetDragging; fallback to parameter setting.
+        """
+        m = self.model
+        if m is None:
+            return
+        # Preferred API used by many LAppModel wrappers
+        for name in ("SetDrag", "SetDragging", "SetMouse"):
+            fn = getattr(m, name, None)
+            if callable(fn):
+                try:
+                    fn(float(nx), float(ny))
+                    return
+                except Exception:
+                    pass
+        # Fallback: set common parameter IDs
+        angle_x = float(max(-1.0, min(1.0, nx))) * 30.0
+        angle_y = float(max(-1.0, min(1.0, ny))) * 30.0
+        body_x = float(max(-1.0, min(1.0, nx))) * 10.0
+        eye_x = float(max(-1.0, min(1.0, nx)))
+        eye_y = float(max(-1.0, min(1.0, ny)))
+        # Candidate setter names in different wrappers
+        setter_candidates = [
+            "SetParamFloat", "SetParameterFloat", "SetParameterValue", "SetParameter",
+        ]
+        def try_set(param_id: str, value: float):
+            for s in setter_candidates:
+                fn = getattr(m, s, None)
+                if callable(fn):
+                    try:
+                        fn(param_id, float(value))
+                        return True
+                    except Exception:
+                        continue
+            return False
+        # Apply a few representative parameters (best-effort)
+        try_set("ParamAngleX", angle_x)
+        try_set("ParamAngleY", angle_y)
+        try_set("ParamBodyAngleX", body_x)
+        try_set("ParamEyeBallX", eye_x)
+        try_set("ParamEyeBallY", eye_y)
+
+    def setAutoBlinkEnable(self, enabled: bool):
+        try:
+            if self.model:
+                self.model.SetAutoBlinkEnable(bool(enabled))
+        except Exception:
+            pass
+
+    def setAutoBreathEnable(self, enabled: bool):
+        try:
+            if self.model:
+                self.model.SetAutoBreathEnable(bool(enabled))
+        except Exception:
+            pass
+
+    def release(self):
+        """Release the current model and GL resources"""
+        if self.model is not None:
+            try:
+                self.model = None
+            except Exception as e:
+                print(f"Error releasing model: {e}")
+        # Delete FBO/texture
+        try:
+            self._ADPOpenGLCanvas__delete_canvas_framebuffer()
+        except Exception:
+            pass
+
+    def getParameterMetaList(self):
+        """Return a list of parameter metadata from the loaded model.
+        Each item: { 'id': str, 'type': any, 'value': float, 'min': float, 'max': float, 'default': float }
+        Returns empty list if model is not ready or API not available.
+        """
+        m = self.model
+        meta = []
+        try:
+            if m is None:
+                return meta
+            count = getattr(m, 'GetParameterCount', None)
+            getter = getattr(m, 'GetParameter', None)
+            if not callable(count) or not callable(getter):
+                return meta
+            n = int(count())
+            for i in range(n):
+                try:
+                    p = getter(i)
+                    pid = getattr(p, 'id', None)
+                    ptype = getattr(p, 'type', None)
+                    pval = float(getattr(p, 'value', 0.0))
+                    pmax = float(getattr(p, 'max', 1.0))
+                    pmin = float(getattr(p, 'min', 0.0))
+                    pdef = float(getattr(p, 'default', 0.0))
+                    if pid is None:
+                        continue
+                    meta.append({
+                        'id': str(pid),
+                        'type': ptype,
+                        'value': pval,
+                        'min': pmin,
+                        'max': pmax,
+                        'default': pdef,
+                    })
+                except Exception:
+                    continue
+        except Exception:
+            return []
+        return meta
