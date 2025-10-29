@@ -40,9 +40,7 @@ def create_program(vs, fs):
 
 
 def create_vao(v_pos, uv_coord):
-    """创建 VAO/VBO，不依赖 numpy。
-    v_pos/uv_coord 可以是 list/tuple 或 array('f')。
-    """
+    """创建 VAO/VBO"""
 
     vao = GL.glGenVertexArrays(1)
     vbo = GL.glGenBuffers(1)
@@ -159,7 +157,6 @@ class ADPOpenGLCanvas(QOpenGLWidget):
         self._use_bg_loc = GL.glGetUniformLocation(self._program, "use_bg")
 
     def __create_vao(self):
-        # 使用 Python 原生 list 和 array 代替 numpy
         vertices = np.array([
             # 位置
             -1.0, 1.0,
