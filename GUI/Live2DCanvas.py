@@ -1,6 +1,6 @@
 import math
 import numpy as np
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 from PyQt5.QtWidgets import QOpenGLWidget
 from PyQt5.QtCore import Qt
@@ -9,7 +9,6 @@ from abc import abstractmethod
 
 import live2d.v3 as live2d
 from live2d.utils.canvas import Canvas
-
 
 live2d.init()
 
@@ -41,18 +40,38 @@ def create_program(vs, fs):
 
 
 def create_vao(v_pos, uv_coord):
+    """创建 VAO/VBO，不依赖 numpy。
+    v_pos/uv_coord 可以是 list/tuple 或 array('f')。
+    """
+
     vao = GL.glGenVertexArrays(1)
     vbo = GL.glGenBuffers(1)
     uvbo = GL.glGenBuffers(1)
+
     GL.glBindVertexArray(vao)
+
+    # 顶点坐标缓冲
     GL.glBindBuffer(GL.GL_ARRAY_BUFFER, vbo)
-    GL.glBufferData(GL.GL_ARRAY_BUFFER, v_pos.nbytes, v_pos, GL.GL_DYNAMIC_DRAW)
+    GL.glBufferData(
+        GL.GL_ARRAY_BUFFER,
+        v_pos.nbytes,
+        v_pos,
+        GL.GL_DYNAMIC_DRAW
+    )
     GL.glVertexAttribPointer(0, 2, GL.GL_FLOAT, False, 0, None)
     GL.glEnableVertexAttribArray(0)
+
+    # UV 坐标缓冲
     GL.glBindBuffer(GL.GL_ARRAY_BUFFER, uvbo)
-    GL.glBufferData(GL.GL_ARRAY_BUFFER, uv_coord.nbytes, uv_coord, GL.GL_DYNAMIC_DRAW)
+    GL.glBufferData(
+        GL.GL_ARRAY_BUFFER,
+        uv_coord.nbytes,
+        uv_coord,
+        GL.GL_DYNAMIC_DRAW
+    )
     GL.glVertexAttribPointer(1, 2, GL.GL_FLOAT, False, 0, None)
     GL.glEnableVertexAttribArray(1)
+
     GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
     GL.glBindVertexArray(0)
     return vao
@@ -140,23 +159,24 @@ class ADPOpenGLCanvas(QOpenGLWidget):
         self._use_bg_loc = GL.glGetUniformLocation(self._program, "use_bg")
 
     def __create_vao(self):
+        # 使用 Python 原生 list 和 array 代替 numpy
         vertices = np.array([
             # 位置
-            -1, 1,
-            -1, -1,
-            1, -1,
-            -1, 1,
-            1, -1,
-            1, 1,
+            -1.0, 1.0,
+            -1.0, -1.0,
+            1.0, -1.0,
+            -1.0, 1.0,
+            1.0, -1.0,
+            1.0, 1.0,
         ], dtype=np.float32)
         uvs = np.array([
             # 纹理坐标
-            0, 1,
-            0, 0,
-            1, 0,
-            0, 1,
-            1, 0,
-            1, 1
+            0.0, 1.0,
+            0.0, 0.0,
+            1.0, 0.0,
+            0.0, 1.0,
+            1.0, 0.0,
+            1.0, 1.0,
         ], dtype=np.float32)
         self._vao = create_vao(vertices, uvs)
 
@@ -326,6 +346,8 @@ class Live2DCanvas(ADPOpenGLCanvas):
         # Advanced parameter overrides
         self._advanced_enabled = False
         self._advanced_params = {}
+        # Cached motions metadata
+        self._motions: List[Dict[str, Any]] = []
 
     def on_init(self):
         live2d.glInit()
@@ -333,6 +355,11 @@ class Live2DCanvas(ADPOpenGLCanvas):
         self.model.LoadModelJson(self.model_path)
         # must be created after opengl context is configured
         self.canvas = Canvas()
+        # Discover motions from model json
+        try:
+            self._motions = self._load_motions_from_model_json(self.model_path)
+        except Exception:
+            self._motions = []
         self.startTimer(int(1000 / 120))
 
     def timerEvent(self, a0):
@@ -341,6 +368,12 @@ class Live2DCanvas(ADPOpenGLCanvas):
     def on_draw(self):
         live2d.clearBuffer()
         self.model.Update()
+        # Apply advanced parameter overrides each frame if enabled
+        if self._advanced_enabled:
+            try:
+                self._apply_advanced_params()
+            except Exception:
+                pass
         self.model.Draw()
 
     def on_resize(self, width: int, height: int):
@@ -455,11 +488,17 @@ class Live2DCanvas(ADPOpenGLCanvas):
         try:
             if m is None:
                 return meta
-            count = getattr(m, 'GetParameterCount', None)
+            count_attr = getattr(m, 'GetParameterCount', None)
             getter = getattr(m, 'GetParameter', None)
-            if not callable(count) or not callable(getter):
+            if not callable(getter):
                 return meta
-            n = int(count())
+            if callable(count_attr):
+                n = int(count_attr())
+            else:
+                try:
+                    n = int(count_attr or 0)
+                except Exception:
+                    n = 0
             for i in range(n):
                 try:
                     p = getter(i)
@@ -484,3 +523,93 @@ class Live2DCanvas(ADPOpenGLCanvas):
         except Exception:
             return []
         return meta
+
+    # --- Motion discovery and playback helpers ---
+    def _load_motions_from_model_json(self, model_json_path: str) -> List[Dict[str, Any]]:
+        """Parse the model3.json file to discover motion groups and files.
+        Returns a list of items: { 'group': str, 'index': int, 'file': str, 'display': str }
+        """
+        import os
+        import json
+        motions: List[Dict[str, Any]] = []
+        if not model_json_path:
+            return motions
+        base_dir = os.path.dirname(model_json_path)
+        try:
+            with open(model_json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except Exception:
+            return motions
+        refs = (data or {}).get('FileReferences') or {}
+        motion_groups = refs.get('Motions') or {}
+        for group, items in motion_groups.items():
+            if not isinstance(items, list):
+                continue
+            for idx, it in enumerate(items):
+                if not isinstance(it, dict):
+                    continue
+                rel = it.get('File') or ''
+                if not rel:
+                    continue
+                full_path = os.path.normpath(os.path.join(base_dir, rel))
+                display = f"{group}[{idx}] - {os.path.basename(rel)}"
+                motions.append({
+                    'group': str(group),
+                    'index': int(idx),
+                    'file': full_path,
+                    'rel': rel,
+                    'display': display,
+                })
+        return motions
+
+    def listMotions(self) -> List[Dict[str, Any]]:
+        """Return cached motion list. Safe to call before GL init (may be empty)."""
+        return list(self._motions or [])
+
+    def playMotion(self, group: str, index: int) -> bool:
+        """Try to play a motion by group/index using best-effort API calls.
+        Returns True if a call was attempted successfully.
+        """
+        m = self.model
+        if m is None:
+            return False
+        # Try common LAppModel APIs
+        candidates = [
+            ('StartMotion', (group, int(index), 1)),
+            ('StartMotionPriority', (group, int(index), 1)),
+            ('StartMotion', (group, int(index))),
+        ]
+        for name, args in candidates:
+            fn = getattr(m, name, None)
+            if callable(fn):
+                try:
+                    fn(*args)
+                    return True
+                except Exception:
+                    continue
+        # Fallback by file path if supported
+        file_item = None
+        for it in self._motions:
+            if it.get('group') == group and int(it.get('index', -1)) == int(index):
+                file_item = it
+                break
+        if file_item is not None:
+            for name in (
+                'StartMotionByFile', 'StartMotionFromFile', 'StartMotionFile', 'PlayMotion', 'LoadAndStartMotion'
+            ):
+                fn = getattr(m, name, None)
+                if callable(fn):
+                    try:
+                        fn(file_item['file'])
+                        return True
+                    except Exception:
+                        continue
+        # As a last resort, try random motion in the group
+        rnd = getattr(m, 'StartRandomMotion', None)
+        if callable(rnd):
+            try:
+                rnd(group, 1)
+                return True
+            except Exception:
+                pass
+        return False

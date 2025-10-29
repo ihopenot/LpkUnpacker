@@ -1,10 +1,10 @@
 import os
 
-from PyQt5.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QSizePolicy, QFileDialog, QWidget, QSplitter
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QFileDialog, QWidget, QSplitter
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QColor
 from qfluentwidgets import (SubtitleLabel, BodyLabel, PushButton, Slider, CheckBox, SpinBox, InfoBar, InfoBarPosition,
-                           CardWidget, ColorDialog, SingleDirectionScrollArea, TextBrowser)
+                           CardWidget, SingleDirectionScrollArea, TextBrowser, ColorDialog)
 
 from GUI.Live2DPreviewWindow import Live2DPreviewWindow
 
@@ -36,7 +36,7 @@ class DragDropArea(QFrame):
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignCenter)
 
-        # 拖拽图标（使用文字代替）
+        # 拖拽图标
         icon_label = SubtitleLabel("📁", self)
         icon_label.setAlignment(Qt.AlignCenter)
 
@@ -45,7 +45,7 @@ class DragDropArea(QFrame):
         main_text.setAlignment(Qt.AlignCenter)
 
         # 次要提示文字
-        sub_text = BodyLabel("Supported: .moc3, .model3.json files", self)
+        sub_text = BodyLabel("Supported: .model3.json files", self)
         sub_text.setAlignment(Qt.AlignCenter)
 
         # 额外提示文字
@@ -69,7 +69,7 @@ class DragDropArea(QFrame):
             urls = event.mimeData().urls()
             if urls and len(urls) == 1:
                 file_path = urls[0].toLocalFile().lower()
-                if file_path.endswith('.moc3') or file_path.endswith('.model3.json'):
+                if file_path.endswith('.model3.json'):
                     event.acceptProposedAction()
                     self.setStyleSheet("""
                         #dragDropArea {
@@ -101,7 +101,7 @@ class DragDropArea(QFrame):
         if urls and len(urls) == 1:
             file_path = urls[0].toLocalFile()
             file_path_lower = file_path.lower()
-            if (file_path_lower.endswith('.moc3') or file_path_lower.endswith('.model3.json')) and os.path.exists(file_path):
+            if file_path_lower.endswith('.model3.json') and os.path.exists(file_path):
                 self.fileDropped.emit(file_path)
                 event.acceptProposedAction()
 
@@ -114,7 +114,7 @@ class DragDropArea(QFrame):
             self,
             "Select Live2D Model File",
             "",
-            "Live2D Model Files (*.moc3 *.model3.json);;MOC3 Files (*.moc3);;Model3 JSON Files (*.model3.json);;All Files (*)"
+            "Live2D Model Files (*.model3.json)"
         )
 
         if file_path and os.path.exists(file_path):
@@ -156,7 +156,7 @@ class Live2DSettingsPanel(QFrame):
         # 高级参数控件（动态）
         self.advanced_enable_check = None
         self.advanced_param_sliders = {}  # id -> (slider, label, scale)
-        self.PARAM_SPECS = []  # filled dynamically from model meta
+        self.PARAM_SPECS = []
         self.param_specs_by_id = {}  # id -> spec dict
         self.advanced_group = None
         self.adv_params_container = None
@@ -247,6 +247,8 @@ class Live2DSettingsPanel(QFrame):
         self.opacity_slider.valueChanged.connect(
             lambda v: self.opacity_label.setText(f"{v}%")
         )
+        # 实时应用设置
+        self.opacity_slider.valueChanged.connect(lambda _: self._emit_settings())
 
         opacity_layout.addWidget(self.opacity_slider)
         opacity_layout.addWidget(self.opacity_label)
@@ -255,6 +257,10 @@ class Live2DSettingsPanel(QFrame):
 
         self.show_controls_check = CheckBox("Show control panel by default", group)
         layout.addWidget(self.show_controls_check)
+
+        # 尺寸变化时也应用
+        self.width_spinbox.valueChanged.connect(lambda _: self._emit_settings())
+        self.height_spinbox.valueChanged.connect(lambda _: self._emit_settings())
 
         return group
 
@@ -282,6 +288,8 @@ class Live2DSettingsPanel(QFrame):
         self.rotation_slider.valueChanged.connect(
             lambda v: self.rotation_label.setText(f"{v}°")
         )
+        # 实时应用旋转
+        self.rotation_slider.valueChanged.connect(lambda _: self._emit_settings())
 
         rotation_layout.addWidget(self.rotation_slider)
         rotation_layout.addWidget(self.rotation_label)
@@ -299,7 +307,7 @@ class Live2DSettingsPanel(QFrame):
         # 颜色选择按钮
         self.bg_color_btn = PushButton("Select Color", group)
         self.bg_color_btn.setEnabled(False)
-        # self.bg_color_btn.clicked.connect(self.open_color_dialog)
+        self.bg_color_btn.clicked.connect(self.open_color_dialog)
         bg_layout.addWidget(self.bg_color_btn)
 
         # 颜色预览块
@@ -314,6 +322,8 @@ class Live2DSettingsPanel(QFrame):
         self.bg_transparent_check.toggled.connect(
             lambda checked: self.bg_color_btn.setEnabled(not checked)
         )
+        # 透明背景切换时也应用设置
+        self.bg_transparent_check.toggled.connect(lambda _: self._emit_settings())
 
         bg_layout.addStretch()
         layout.addLayout(bg_layout)
@@ -333,14 +343,17 @@ class Live2DSettingsPanel(QFrame):
         # 交互选项
         self.mouse_tracking_check = CheckBox("Enable mouse tracking", group)
         self.mouse_tracking_check.setChecked(True)
+        self.mouse_tracking_check.clicked.connect(lambda _: self._emit_settings())
         layout.addWidget(self.mouse_tracking_check)
 
         self.auto_blink_check = CheckBox("Enable auto blinking animation", group)
         self.auto_blink_check.setChecked(True)
+        self.auto_blink_check.clicked.connect(lambda _: self._emit_settings())
         layout.addWidget(self.auto_blink_check)
 
         self.auto_breath_check = CheckBox("Enable auto breathing animation", group)
         self.auto_breath_check.setChecked(True)
+        self.auto_breath_check.clicked.connect(lambda _: self._emit_settings())
         layout.addWidget(self.auto_breath_check)
 
         return group
@@ -351,7 +364,7 @@ class Live2DSettingsPanel(QFrame):
         layout = QVBoxLayout(group)
         layout.setContentsMargins(15, 15, 15, 15)
 
-        title = SubtitleLabel("Advanced Parameters (Live2D)", group)
+        title = SubtitleLabel("Advanced Settings", group)
         layout.addWidget(title)
 
         self.advanced_enable_check = CheckBox("Enable advanced parameter overrides", group)
@@ -366,15 +379,15 @@ class Live2DSettingsPanel(QFrame):
         self.adv_params_container_layout.setSpacing(8)
         layout.addWidget(self.adv_params_container)
 
-        # Buttons row
+        # Buttons row (adv params)
         btns_layout = QHBoxLayout()
         refresh_btn = PushButton("Refresh From Current Model", group)
         refresh_btn.clicked.connect(self.requestRefreshParams.emit)
         reset_btn = PushButton("Reset Advanced Params", group)
         reset_btn.clicked.connect(self.reset_advanced_params)
-        btns_layout.addStretch()
         btns_layout.addWidget(refresh_btn)
         btns_layout.addWidget(reset_btn)
+        btns_layout.addStretch()
         layout.addLayout(btns_layout)
 
         return group
@@ -387,7 +400,6 @@ class Live2DSettingsPanel(QFrame):
 
     def reset_advanced_params(self):
         """将高级参数重置为当前模型的默认值"""
-        # Use current specs to reset
         for spec in self.PARAM_SPECS:
             sid = spec['id']
             if sid in self.advanced_param_sliders:
@@ -411,30 +423,30 @@ class Live2DSettingsPanel(QFrame):
         meta: list of {id, type, value, min, max, default}
         尽可能保留用户当前已设定的值。
         """
-        # Preserve existing values when possible
+        # 尽可能保留用户当前已设定的值
         prev_values = {}
         for pid, (slider, _lbl, scale) in self.advanced_param_sliders.items():
             prev_values[pid] = slider.value() / float(scale)
 
-        # Clear container and internal maps
+        # 清理旧控件
         self._clear_layout(self.adv_params_container_layout)
         self.advanced_param_sliders.clear()
         self.PARAM_SPECS = []
         self.param_specs_by_id.clear()
 
-        # Heuristic scale: fine-grain for [-1,1] and [0,1], else 1
+        # 缩放决定函数
         def decide_scale(vmin, vmax):
             rng = max(vmax, vmin) - min(vmax, vmin)
             if rng <= 2.0:
                 return 100
             return 1
 
-        # Build controls in alphabetical order by id for consistency
+        # 构造控件，按id字母序排列以保持一致性
         for p in sorted(meta_list, key=lambda x: str(x.get('id', ''))):
             pid = str(p.get('id', ''))
             pmin = float(p.get('min', 0.0))
             pmax = float(p.get('max', 1.0))
-            pdef = float(p.get('default', 0.0))
+            pdef = float(p.get('default', 0.0))+0.0
             pval = float(p.get('value', pdef))
             scale = decide_scale(pmin, pmax)
             spec = {
@@ -460,7 +472,7 @@ class Live2DSettingsPanel(QFrame):
                 s_min, s_max = s_max, s_min
             slider.setRange(s_min, s_max)
 
-            # Initial value: keep previous if exists, else model default/value
+            # 初始值：如果存在则保留之前的值，否则使用模型默认值/当前值
             init_val = prev_values.get(pid, pval)
             init_val = max(pmin, min(pmax, init_val))
             slider.setValue(int(round(init_val * scale)))
@@ -472,7 +484,7 @@ class Live2DSettingsPanel(QFrame):
                 return lambda v: lbl.setText(f"{v/scale_factor:.2f}") if scale_factor != 1 else lbl.setText(f"{v}")
 
             slider.valueChanged.connect(make_on_change(val_label, scale))
-            slider.valueChanged.connect(lambda _v: self._emit_settings())
+            slider.valueChanged.connect(lambda _: self._emit_settings())
 
             row.addWidget(slider)
             row.addWidget(val_label)
@@ -512,6 +524,32 @@ class Live2DSettingsPanel(QFrame):
             settings['advanced_params'] = {}
         return settings
 
+    def open_color_dialog(self):
+        """使用 qfluentwidgets 的 ColorDialog 选择背景颜色，并实时应用"""
+        current = self.selected_bg_color if isinstance(self.selected_bg_color, QColor) else QColor(255, 255, 255)
+        try:
+            dlg = ColorDialog(current, "Choose Background Color", self, enableAlpha=False)
+        except TypeError:
+            dlg = ColorDialog(current, "Choose Background Color", self)
+        def on_color_changed(color: QColor):
+            if isinstance(color, QColor) and color.isValid():
+                self.selected_bg_color = color
+                try:
+                    self.bg_color_preview.setStyleSheet(
+                        f"QFrame{{border:1px solid #ccc; border-radius:4px; background:{color.name()};}}"
+                    )
+                except Exception:
+                    pass
+                self._emit_settings()
+        try:
+            dlg.colorChanged.connect(on_color_changed)
+        except Exception:
+            pass
+        try:
+            dlg.exec()
+        except Exception:
+            pass
+
 class PreviewPage(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -523,21 +561,21 @@ class PreviewPage(QFrame):
         self.title_label = None
         self.main_layout = None
         self.current_model_path = None
-        self.setObjectName('previewPage')  # Required for navigation
-        self.preview_windows = []  # 存储打开的预览窗口
+        self.setObjectName('previewPage')
+        self.preview_window = None
+        # 新增：预览按钮冷却
+        self._preview_cooldown_timer = None
+        self._preview_cooldown_ms = 1500  # 冷却时长（毫秒）
 
         self.setupUI()
 
-        # 响应窗口大小变化
-        # self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
     def setupUI(self):
-        # Main layout
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(20, 20, 20, 20)
         self.main_layout.setSpacing(10)
 
-        # Title
+        # 标题
         self.title_label = SubtitleLabel("Live2D Preview", self)
         self.main_layout.addWidget(self.title_label)
 
@@ -567,10 +605,11 @@ class PreviewPage(QFrame):
         button_layout.addStretch()
         self.preview_btn = PushButton("Preview Model", self)
         self.preview_btn.setEnabled(False)
-        self.preview_btn.clicked.connect(self.preview_current_model)
+        # 修改：接入冷却逻辑
+        self.preview_btn.clicked.connect(self._on_preview_clicked)
 
-        self.close_all_btn = PushButton("Close All Windows", self)
-        self.close_all_btn.clicked.connect(self.close_all_preview_windows)
+        self.close_all_btn = PushButton("Close Window", self)
+        self.close_all_btn.clicked.connect(self.close_preview_window)
 
         button_layout.addWidget(self.preview_btn)
         button_layout.addWidget(self.close_all_btn)
@@ -597,6 +636,56 @@ class PreviewPage(QFrame):
 
         # 当前模型路径
         self.current_model_path = None
+
+        # 新增：初始化冷却计时器
+        self._preview_cooldown_timer = QTimer(self)
+        self._preview_cooldown_timer.setSingleShot(True)
+        self._preview_cooldown_timer.timeout.connect(self._on_preview_cooldown_end)
+
+    # 新增：预览按钮点击（带冷却）
+    def _on_preview_clicked(self):
+        # 若处于冷却中，拦截点击并提示
+        if self._preview_cooldown_timer and self._preview_cooldown_timer.isActive():
+            InfoBar.warning(
+                title="Wait",
+                content="请稍后再点击预览按钮",
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=1500,
+                parent=self
+            )
+            return
+        # 进入冷却：先禁用按钮
+        if self.preview_btn is not None:
+            self.preview_btn.setEnabled(False)
+            try:
+                self.preview_btn.setToolTip("按钮冷却中…")
+            except Exception:
+                pass
+        # 开始冷却计时
+        if self._preview_cooldown_timer:
+            try:
+                self._preview_cooldown_timer.start(self._preview_cooldown_ms)
+            except Exception:
+                # 兜底：若计时器异常，仍尝试在结束时恢复
+                pass
+        # 执行原有预览逻辑
+        try:
+            self.preview_current_model()
+        except Exception:
+            # 忽略异常，等待冷却结束再恢复按钮
+            pass
+
+    # 新增：冷却结束处理
+    def _on_preview_cooldown_end(self):
+        if self.preview_btn is not None:
+            # 冷却结束，仅当存在可预览模型时才启用
+            self.preview_btn.setEnabled(bool(self.current_model_path))
+            try:
+                self.preview_btn.setToolTip("")
+            except Exception:
+                pass
 
     def on_file_dropped(self, file_path):
         """处理文件拖拽"""
@@ -629,7 +718,9 @@ class PreviewPage(QFrame):
 Ready to preview! 🚀"""
 
         self.model_info_text_box.setMarkdown(info_text)
-        self.preview_btn.setEnabled(True)
+        # 仅在未处于冷却中时启用预览按钮
+        if not (self._preview_cooldown_timer and self._preview_cooldown_timer.isActive()):
+            self.preview_btn.setEnabled(True)
 
         # 显示成功信息
         InfoBar.success(
@@ -648,6 +739,10 @@ Ready to preview! 🚀"""
             self.show_error("No model selected", "Please drag and drop a .moc3 file first.")
             return
 
+        # 保证同时仅有一个预览窗口
+        if self.preview_window is not None:
+            self.close_preview_window()
+
         # 创建预览窗口
         preview_window = Live2DPreviewWindow(self.current_model_path)
 
@@ -656,14 +751,17 @@ Ready to preview! 🚀"""
             meta = preview_window.live2d_canvas.getParameterMetaList() if preview_window.live2d_canvas else []
             if hasattr(self.settings_panel, 'rebuild_advanced_params'):
                 self.settings_panel.rebuild_advanced_params(meta)
+            parts = preview_window.live2d_canvas.getPartIds() if preview_window.live2d_canvas else []
+            if hasattr(self.settings_panel, 'rebuild_parts_opacity'):
+                self.settings_panel.rebuild_parts_opacity(parts)
         except Exception:
             pass
 
         # 连接关闭信号
         preview_window.closed.connect(lambda: self.on_preview_window_closed(preview_window))
 
-        # 添加到窗口列表并显示
-        self.preview_windows.append(preview_window)
+        # 只保存一个窗口并显示
+        self.preview_window = preview_window
         preview_window.show()
 
         # 获取（可能被重建后的）设置并应用
@@ -676,14 +774,17 @@ Ready to preview! 🚀"""
 
     def on_preview_window_closed(self, window):
         """预览窗口关闭处理"""
-        if window in self.preview_windows:
-            self.preview_windows.remove(window)
+        if self.preview_window is window:
+            self.preview_window = None
 
-    def close_all_preview_windows(self):
-        """关闭所有预览窗口"""
-        for window in self.preview_windows[:]:  # 创建副本避免修改列表时出错
-            window.close()
-        self.preview_windows.clear()
+    def close_preview_window(self):
+        """关闭当前预览窗口"""
+        if self.preview_window is not None:
+            try:
+                self.preview_window.close()
+            except Exception:
+                pass
+            self.preview_window = None
 
     def show_error(self, title, message):
         """显示错误信息"""
@@ -698,20 +799,26 @@ Ready to preview! 🚀"""
         )
 
     def on_settings_changed(self, settings: dict):
-        """Apply updated settings to all open preview windows (live updates)"""
-        for w in self.preview_windows:
-            try:
-                w.apply_settings(settings)
-            except Exception:
-                continue
+        """应用更新的设置到打开的预览窗口（实时更新）"""
+        w = self.preview_window
+        if w is None:
+            return
+        try:
+            w.apply_settings(settings)
+        except Exception:
+            pass
 
     def on_request_refresh_params(self):
-        """Re-enumerate parameters from the latest opened preview window and rebuild UI"""
-        if not self.preview_windows:
+        """重新从最新打开的预览窗口枚举参数和部件并重建UI"""
+        latest = self.preview_window
+        if latest is None:
             return
-        latest = self.preview_windows[-1]
         try:
-            meta = latest.live2d_canvas.getParameterMetaList() if latest.live2d_canvas else []
+            canvas = latest.live2d_canvas
+            meta = canvas.getParameterMetaList() if canvas else []
             self.settings_panel.rebuild_advanced_params(meta)
+            parts = canvas.getPartIds() if canvas else []
+            if hasattr(self.settings_panel, 'rebuild_parts_opacity'):
+                self.settings_panel.rebuild_parts_opacity(parts)
         except Exception:
             pass

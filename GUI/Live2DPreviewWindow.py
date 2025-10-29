@@ -1,9 +1,10 @@
 import os
-import sys
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QApplication)
-from PyQt5.QtCore import pyqtSignal, QPoint, Qt
-from qfluentwidgets import (PushButton, Slider, SubtitleLabel, BodyLabel)
+from PyQt5.QtCore import pyqtSignal, QPoint, Qt, QEvent
+from qfluentwidgets import (PushButton, SubtitleLabel, BodyLabel)
 from qfluentwidgets import CardWidget
+from qfluentwidgets import ComboBox
+from qfluentwidgets import InfoBar, InfoBarPosition
 
 from GUI.Live2DCanvas import Live2DCanvas
 
@@ -16,16 +17,18 @@ class Live2DPreviewWindow(QWidget):
     def __init__(self, model_path=None):
         super().__init__()
         self.model_path = model_path
+        self.current_model_path = None
         self.live2d_canvas = None
         self.control_panel = None
         self.dragging = False
         self.drag_position = QPoint()
+        self._selected_motion = None  # tuple(group, index)
+        self._motion_items = []  # [(group, index, display)]
 
         # 设置无边框窗口
         self.setWindowFlag(Qt.FramelessWindowHint, True)
         self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
         self.setWindowFlag(Qt.Tool, True)
-        # Use explicit enum for linter friendliness
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         # 设置窗口大小和位置
@@ -35,6 +38,27 @@ class Live2DPreviewWindow(QWidget):
         # 初始化UI
         self.setup_ui()
 
+    # 新增：统一的错误提示
+    def _show_error_infobar(self, content: str, title: str = "加载Live2D模型失败"):
+        try:
+            # 优先将 InfoBar 挂到主窗口/其他顶层窗口上，避免当前预览窗口关闭后看不到提示
+            parent = QApplication.activeWindow()
+            if parent is None or parent is self:
+                for w in QApplication.topLevelWidgets():
+                    if w is not self and w.isVisible():
+                        parent = w
+                        break
+            InfoBar.error(
+                title=title,
+                content=content,
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=parent if parent is not None else self
+            )
+        except Exception:
+            print(f"[Error] {title}: {content}")
 
     def setup_ui(self):
         """设置用户界面"""
@@ -42,11 +66,28 @@ class Live2DPreviewWindow(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        # 统一确定模型路径
         if self.model_path and os.path.exists(self.model_path):
-            # 创建Live2D显示区域
-            self.live2d_canvas = Live2DCanvas(self.model_path)
+            model_path_to_use = self.model_path
         else:
-            self.live2d_canvas = Live2DCanvas("./runtime/hiyori_free_t08.model3.json")
+            model_path_to_use = "./runtime/hiyori_free_t08.model3.json"
+
+        self.current_model_path = model_path_to_use
+
+        # 若文件不存在，直接提示并关闭
+        if not os.path.exists(model_path_to_use):
+            self._show_error_infobar(f"模型文件不存在：{os.path.abspath(model_path_to_use)}")
+            self.close()
+            return
+
+        # 创建Live2D显示区域并捕获异常
+        try:
+            self.live2d_canvas = Live2DCanvas(model_path_to_use)
+        except Exception as e:
+            # 显示错误并关闭窗口
+            self._show_error_infobar(f"{type(e).__name__}: {e}")
+            self.close()
+            return
 
         # 设置Live2D widget样式
         self.live2d_canvas.setStyleSheet("""
@@ -60,6 +101,9 @@ class Live2DPreviewWindow(QWidget):
             }
         """)
 
+        # 监听canvas右键
+        self.live2d_canvas.installEventFilter(self)
+
         layout.addWidget(self.live2d_canvas)
 
         # 创建控制面板（可隐藏）
@@ -70,7 +114,7 @@ class Live2DPreviewWindow(QWidget):
     def create_control_panel(self):
         """创建控制面板"""
         panel = CardWidget(self)
-        panel.setFixedHeight(150)
+        panel.setFixedHeight(180)
         panel.setStyleSheet("""
             CardWidget {
                 background: rgba(30, 30, 30, 0.9);
@@ -85,6 +129,20 @@ class Live2DPreviewWindow(QWidget):
         title = SubtitleLabel("Live2D Controls", panel)
         title.setStyleSheet("color: white;")
         layout.addWidget(title)
+
+        # 动作选择
+        row = QHBoxLayout()
+        lbl = BodyLabel("右键动作绑定", panel)
+        lbl.setStyleSheet("color: white;")
+        row.addWidget(lbl)
+        self.motion_combo = ComboBox(panel)
+        self.motion_combo.setMinimumWidth(220)
+        # 填充动作列表
+        self._populate_motion_combo()
+        # 保存选择
+        self.motion_combo.currentIndexChanged.connect(self._on_motion_changed)
+        row.addWidget(self.motion_combo, 1)
+        layout.addLayout(row)
 
         # 控制按钮行
         button_layout = QHBoxLayout()
@@ -101,20 +159,64 @@ class Live2DPreviewWindow(QWidget):
 
         layout.addLayout(button_layout)
 
-        # 透明度控制
-        opacity_layout = QHBoxLayout()
-        opacity_label = BodyLabel("Opacity:", panel)
-        opacity_label.setStyleSheet("color: white;")
-        self.opacity_slider = Slider(Qt.Horizontal, panel)
-        self.opacity_slider.setRange(10, 100)
-        self.opacity_slider.setValue(100)
-        self.opacity_slider.valueChanged.connect(self.on_opacity_changed)
-
-        opacity_layout.addWidget(opacity_label)
-        opacity_layout.addWidget(self.opacity_slider)
-        layout.addLayout(opacity_layout)
-
         return panel
+
+    def _populate_motion_combo(self):
+        """读取model3.json中的动作并填充到下拉框"""
+        import json
+        self.motion_combo.clear()
+        self._motion_items = []
+        self._selected_motion = None
+        path = self.current_model_path or self.model_path
+        if not path or not os.path.exists(path):
+            return
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            refs = (data or {}).get('FileReferences') or {}
+            groups = refs.get('Motions') or {}
+            for g, items in groups.items():
+                if not isinstance(items, list):
+                    continue
+                for idx, it in enumerate(items):
+                    rel = (it or {}).get('File') or ''
+                    display = f"{g}[{idx}] - {os.path.basename(rel) if rel else ''}"
+                    self._motion_items.append((g, idx, display))
+        except Exception:
+            self._motion_items = []
+        if not self._motion_items:
+            self.motion_combo.addItem("(无可用动作)")
+            self.motion_combo.setEnabled(False)
+            return
+        self.motion_combo.setEnabled(True)
+        for (_, _, disp) in self._motion_items:
+            self.motion_combo.addItem(disp)
+        # 默认选中第一个
+        self.motion_combo.setCurrentIndex(0)
+        self._on_motion_changed(0)
+
+    def _on_motion_changed(self, i: int):
+        if 0 <= i < len(self._motion_items):
+            g, idx, _ = self._motion_items[i]
+            self._selected_motion = (str(g), int(idx))
+        else:
+            self._selected_motion = None
+
+    def eventFilter(self, obj, event):
+        # 在canvas上右键 -> 播放选中动作
+        if obj is self.live2d_canvas and event.type() == QEvent.MouseButtonPress:
+            try:
+                if event.button() == Qt.RightButton and self._selected_motion:
+                    group, index = self._selected_motion
+                    # 调用画布播放
+                    try:
+                        self.live2d_canvas.playMotion(group, index)
+                    except Exception:
+                        pass
+                    return True
+            except Exception:
+                pass
+        return super().eventFilter(obj, event)
 
     def move_to_screen_center(self):
         """将窗口移动到屏幕中央"""
@@ -132,10 +234,18 @@ class Live2DPreviewWindow(QWidget):
         # 应用窗口设置
         if 'window_size' in settings:
             w, h = settings['window_size']
+            # 当控制面板可见时，窗口总高度 = 目标画布高度 + 控制面板高度
+            extra_h = 0
             try:
-                self.resize(int(w), int(h))
+                if self.control_panel is not None and self.control_panel.isVisible():
+                    extra_h = int(self.control_panel.height())
             except Exception:
-                self.resize(w, h)
+                extra_h = 0
+            total_h = (int(h) if isinstance(h, (int, float)) else h) + extra_h
+            try:
+                self.resize(int(w), int(total_h))
+            except Exception:
+                self.resize(w, total_h)
 
         # 画布透明度（模型不透明度）
         if 'opacity' in settings and self.live2d_canvas:
@@ -179,12 +289,6 @@ class Live2DPreviewWindow(QWidget):
             self.toggle_controls_btn.setText("Hide Controls")
             # 调整窗口大小
             self.resize(self.width(), self.height() + self.control_panel.height())
-
-    def on_opacity_changed(self, value):
-        """透明度变化处理"""
-        opacity = value / 100.0
-        if self.live2d_canvas:
-            self.live2d_canvas.setCanvasOpacity(opacity)
 
     def mousePressEvent(self, event):
         """鼠标按下事件 - 用于拖拽窗口"""
@@ -236,18 +340,3 @@ class Live2DPreviewWindow(QWidget):
         """右键菜单事件"""
         # 可以在这里添加右键菜单功能
         pass
-
-if __name__ == "__main__":
-    from PyQt5.QtCore import Qt, QCoreApplication
-
-    # Use ApplicationAttribute enum for clarity
-    QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
-    QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
-    QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
-    app = QApplication(sys.argv)
-    window = Live2DPreviewWindow()
-    window.show()
-
-    window2 = Live2DPreviewWindow()
-    window2.show()
-    sys.exit(app.exec_())
