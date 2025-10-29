@@ -132,7 +132,7 @@ class Live2DPreviewWindow(QWidget):
 
         # 动作选择
         row = QHBoxLayout()
-        lbl = BodyLabel("右键动作绑定", panel)
+        lbl = BodyLabel("Right-Click Action", panel)
         lbl.setStyleSheet("color: white;")
         row.addWidget(lbl)
         self.motion_combo = ComboBox(panel)
