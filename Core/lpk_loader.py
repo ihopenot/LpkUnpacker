@@ -16,21 +16,41 @@ class LpkLoader():
         self.encrypted = "true"
         self.trans = {}
         self.entrys = {}
-        self.load_lpk()
+        
+        # Validate input files
+        if not os.path.exists(lpkpath):
+            raise FileNotFoundError(f"LPK file not found: {lpkpath}")
+        
+        if configpath and not os.path.exists(configpath):
+            logger.warning(f"Config file not found: {configpath}")
+            
+        try:
+            self.load_lpk()
+        except Exception as e:
+            logger.error(f"Failed to initialize LpkLoader: {e}")
+            raise
     
     def load_lpk(self):
-        self.lpkfile = zipfile.ZipFile(self.lpkpath)
+        try:
+            self.lpkfile = zipfile.ZipFile(self.lpkpath)
+        except zipfile.BadZipFile:
+            raise Exception(f"Invalid or corrupted LPK file: {self.lpkpath}")
+        except Exception as e:
+            raise Exception(f"Failed to open LPK file: {e}")
+            
         try:
             config_mlve_raw = self.lpkfile.read(hashed_filename("config.mlve")).decode()
         except KeyError:
             try:
                 config_mlve_raw = self.lpkfile.read("config.mlve").decode('utf-8-sig')
-            except:
-                logger.fatal("Failed to retrieve lpk config!")
-                exit(0)
+            except Exception as e:
+                logger.fatal(f"Failed to retrieve lpk config: {e}")
+                raise Exception(f"Failed to retrieve lpk config: {e}")
 
-
-        self.mlve_config = json.loads(config_mlve_raw)
+        try:
+            self.mlve_config = json.loads(config_mlve_raw)
+        except json.JSONDecodeError as e:
+            raise Exception(f"Invalid JSON in mlve config: {e}")
 
         logger.debug(f"mlve config:\n {self.mlve_config}")
         self.lpkType = self.mlve_config.get("type")
@@ -39,7 +59,18 @@ class LpkLoader():
             self.load_config()
     
     def load_config(self):
-        self.config = json.loads(open(self.configpath, "r", encoding="utf8").read())
+        try:
+            with open(self.configpath, "r", encoding="utf8") as f:
+                self.config = json.loads(f.read())
+        except FileNotFoundError:
+            logger.error(f"Config file not found: {self.configpath}")
+            raise Exception(f"Config file not found: {self.configpath}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in config file: {e}")
+            raise Exception(f"Invalid JSON in config file: {e}")
+        except Exception as e:
+            logger.error(f"Failed to load config: {e}")
+            raise Exception(f"Failed to load config: {e}")
     
     def extract(self, outputdir: str):
         if self.lpkType in ["STD2_0", "STM_1_0"]:
@@ -85,9 +116,9 @@ class LpkLoader():
                         decryptedData = self.decrypt_file(file)
                         with open(outputFilePath, "wb") as outputFile:
                             outputFile.write(decryptedData)
-            except:
-                logger.fatal(f"Failed to decrypt {self.lpkpath}, possibly wrong/unsupported format.")
-                exit(0)
+            except Exception as e:
+                logger.fatal(f"Failed to decrypt {self.lpkpath}, possibly wrong/unsupported format. Error: {e}")
+                raise Exception(f"Failed to decrypt {self.lpkpath}, possibly wrong/unsupported format. Error: {e}")
     
     def extract_costume(self, costume: dict, dir: str):
         if costume["path"] == "":

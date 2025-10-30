@@ -44,6 +44,19 @@ except Exception as e:
             self.setObjectName('encryptionPage')
             QHBoxLayout(self).addWidget(QFrame(self))
 
+try:
+    from GUI.SteamWorkshopPage import SteamWorkshopPage
+except Exception as e:
+    import traceback
+    print(f"Error importing SteamWorkshopPage: {e}")
+    traceback.print_exc()
+    # Create a dummy page
+    class SteamWorkshopPage(QFrame):
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.setObjectName('steamWorkshopPage')
+            QHBoxLayout(self).addWidget(QFrame(self))
+
 
 class MainWindow(FluentWindow):
     """ Main Window with Navigation """
@@ -72,6 +85,13 @@ class MainWindow(FluentWindow):
             print(f"Error creating EncryptionPage: {e}")
             self.encryptionPage = QFrame(self)
             self.encryptionPage.setObjectName('encryptionPage')
+            
+        try:
+            self.steamWorkshopPage = SteamWorkshopPage(self)
+        except Exception as e:
+            print(f"Error creating SteamWorkshopPage: {e}")
+            self.steamWorkshopPage = QFrame(self)
+            self.steamWorkshopPage.setObjectName('steamWorkshopPage')
 
         self.initWindow()
         self.initNavigation()
@@ -97,10 +117,15 @@ class MainWindow(FluentWindow):
             print(f"Error adding ExtractorPage to navigation: {e}")
             
         try:
+            self.addSubInterface(self.steamWorkshopPage, FIF.GAME, 'Steam Workshop')
+        except Exception as e:
+            print(f"Error adding SteamWorkshopPage to navigation: {e}")
+            
+        try:
             self.addSubInterface(self.previewPage, FIF.MOVIE, 'Live2D Preview')
         except Exception as e:
             print(f"Error adding PreviewPage to navigation: {e}")
-            
+
         self.navigationInterface.addSeparator()
             
         try:
