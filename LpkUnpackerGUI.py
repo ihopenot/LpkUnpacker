@@ -4,9 +4,18 @@ from PyQt5.QtCore import Qt, QCoreApplication
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QIcon
 
+# 在创建QApplication之前设置QtWebEngine所需的属性
+QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
 # 确保设置正确的属性来支持高DPI缩放
 QCoreApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
 QCoreApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+
+# 预先导入QtWebEngineWidgets以确保正确初始化
+try:
+    from PyQt5 import QtWebEngineWidgets
+except ImportError:
+    print("Warning: QtWebEngineWidgets not available. Web preview functionality will be disabled.")
+    QtWebEngineWidgets = None
 
 def run_application():
     # 创建QApplication实例

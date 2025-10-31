@@ -1,2 +1,4 @@
 venv/
 settings.json
+build/
+__pycache__/

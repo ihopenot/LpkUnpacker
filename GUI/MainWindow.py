@@ -3,6 +3,7 @@ from PyQt5.QtCore import Qt, QEvent, QSize
 from PyQt5.QtGui import QIcon, QFont, QResizeEvent
 from qfluentwidgets import NavigationItemPosition, FluentWindow, setTheme, Theme, setFont
 from qfluentwidgets import FluentIcon as FIF
+from Core.settings_manager import SettingsManager
 
 # Import pages - using try/except to handle potential import errors
 try:
@@ -63,6 +64,10 @@ class MainWindow(FluentWindow):
     
     def __init__(self):
         super().__init__()
+        self.setMicaEffectEnabled(False)
+        
+        # Initialize settings manager
+        self.settings_manager = SettingsManager()
         
         # Create sub-interfaces
         try:
@@ -96,8 +101,8 @@ class MainWindow(FluentWindow):
         self.initWindow()
         self.initNavigation()
         
-        # Set theme
-        setTheme(Theme.AUTO)
+        # Set theme from settings
+        self.apply_theme()
         
         # 为整个应用设置字体
         self.updateFontSize()
@@ -162,7 +167,45 @@ class MainWindow(FluentWindow):
         font.setPointSize(font_size)
         app.setFont(font)
         
-        # 确保子页面知道字体已更新
-        for page in [self.extractorPage, self.previewPage, self.encryptionPage]:
+        # 通知所有页面更新UI缩放
+        for page in [self.extractorPage, self.previewPage, self.encryptionPage, self.steamWorkshopPage]:
             if hasattr(page, 'updateUIScale'):
                 page.updateUIScale(self.width(), self.height())
+    
+    def apply_theme(self):
+        """从设置中应用主题"""
+        try:
+            theme_setting = self.settings_manager.get('theme', 'light').lower()
+            
+            if theme_setting == 'light':
+                setTheme(Theme.LIGHT)
+            elif theme_setting == 'dark':
+                setTheme(Theme.DARK)
+            else:  # 'auto' or any other value
+                setTheme(Theme.LIGHT)  # 默认使用浅色主题而不是AUTO
+                
+            # 强制设置窗口背景色为白色
+            self.setStyleSheet("""
+                QWidget {
+                    background-color: white;
+                    color: black;
+                }
+                QFrame {
+                    background-color: white;
+                }
+            """)
+                
+            print(f"Applied theme: {theme_setting}")
+        except Exception as e:
+            print(f"Error applying theme: {e}")
+            # Fallback to light theme
+            setTheme(Theme.LIGHT)
+            self.setStyleSheet("""
+                QWidget {
+                    background-color: white;
+                    color: black;
+                }
+                QFrame {
+                    background-color: white;
+                }
+            """)
