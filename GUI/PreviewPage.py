@@ -9,6 +9,9 @@ from qfluentwidgets import (SubtitleLabel, BodyLabel, PushButton, Slider, CheckB
                            CardWidget, SingleDirectionScrollArea, TextBrowser, ColorDialog)
 
 from GUI.Live2DPreviewWindow import Live2DPreviewWindow
+# Try to import motion fixer utilities
+import motion_fixed
+
 
 # Helper to check *model*.json pattern
 _def_model_json_pattern = re.compile(r"model\d*\.json$", re.IGNORECASE)
@@ -39,35 +42,68 @@ def _is_live2d_v3_json(data: dict) -> bool:
         return False
     return False
 
-def _prepare_and_validate_model_json(path: str):
+def _fix_model_motions(model_json: dict, base_dir: str):
+    """Fix motion3.json files referenced by the model json in-place using motion_fixed.
+    base_dir: absolute directory containing the model json; motions are resolved relative to this.
     """
-    Validate Live2D v3 model json and pretty-print if needed.
-    Returns (safe_path, temp_created_path or None).
-    Raises Exception on validation failure.
+    if motion_fixed is None or not isinstance(model_json, dict):
+        return
+    refs = model_json.get('FileReferences') or {}
+    motions = refs.get('Motions') or {}
+    if not isinstance(motions, dict):
+        return
+    for _group, items in motions.items():
+        if not isinstance(items, list):
+            continue
+        for it in items:
+            try:
+                if not isinstance(it, dict):
+                    continue
+                rel = it.get('File') or ''
+                if not rel or not isinstance(rel, str):
+                    continue
+                motion_path = os.path.normpath(os.path.join(base_dir, rel))
+                # Only process .json files; skip if not exists
+                if not motion_path.lower().endswith('.json') or not os.path.isfile(motion_path):
+                    continue
+                # Overwrite in place by using its directory as save_root
+                motion_fixed.copy_modify_from_motion(motion_path, save_root=os.path.dirname(motion_path))
+            except Exception:
+                # Best effort: ignore single motion failures
+                continue
+
+def _prepare_and_validate_model_json(path: str) -> str:
+    """
+    Validate json is Live2D v3, then pretty-print to a sibling *.pretty.json file.
+    Also fix referenced motions in-place using motion_fixed if available.
+    Returns the path to the pretty-printed file.
+    Raises on validation failure or json parse error.
     """
     with open(path, 'r', encoding='utf-8') as f:
         text = f.read()
     data = json.loads(text)
     if not _is_live2d_v3_json(data):
-        raise ValueError("Not a valid Live2D v3 model json (missing FileReferences.Moc .moc3)")
-    # Pretty-print to same directory to preserve relative paths
-    base_dir = os.path.dirname(path)
-    base_name = os.path.basename(path)
-    name, ext = os.path.splitext(base_name)
-    pretty_name = f"{name}.pretty{ext or '.json'}"
-    pretty_path = os.path.join(base_dir, pretty_name)
-    if os.path.exists(pretty_path):
-        idx = 1
+        raise ValueError('Not a valid Live2D v3 model json (expect FileReferences.Moc *.moc3 or Version>=3)')
+    # Attempt to fix motions before creating the pretty json copy
+    try:
+        _fix_model_motions(data, os.path.dirname(os.path.abspath(path)))
+    except Exception:
+        pass
+    base_dir = os.path.dirname(os.path.abspath(path))
+    name, ext = os.path.splitext(os.path.basename(path))
+    pretty = os.path.join(base_dir, f"{name}.pretty{ext or '.json'}")
+    if os.path.exists(pretty):
+        i = 1
         while True:
-            alt = os.path.join(base_dir, f"{name}.pretty{idx}{ext or '.json'}")
+            alt = os.path.join(base_dir, f"{name}.pretty{i}{ext or '.json'}")
             if not os.path.exists(alt):
-                pretty_path = alt
+                pretty = alt
                 break
-            idx += 1
-    with open(pretty_path, 'w', encoding='utf-8') as f:
+            i += 1
+    with open(pretty, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
         f.write('\n')
-    return pretty_path
+    return pretty
 
 class DragDropArea(QFrame):
     """拖拽区域组件"""
