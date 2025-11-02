@@ -133,9 +133,13 @@ class DragDropArea(QFrame):
                 if _is_model_json(file_path):
                     event.acceptProposedAction()
                     self.setStyleSheet("""
-                        #dragDropArea {
+                        DragDropArea {
                             border: 2px solid #007ACC;
                             border-radius: 10px;
+                            background-color: transparent;
+                        }
+                        DragDropArea:hover {
+                            border-color: #007ACC;
                             background-color: transparent;
                         }
                     """)
@@ -145,12 +149,12 @@ class DragDropArea(QFrame):
     def dragLeaveEvent(self, event):
         """拖拽离开事件"""
         self.setStyleSheet("""
-            #dragDropArea {
+            DragDropArea {
                 border: 2px dashed #ccc;
                 border-radius: 10px;
                 background-color: transparent;
             }
-            #dragDropArea:hover {
+            DragDropArea:hover {
                 border-color: #007ACC;
                 background-color: transparent;
             }
