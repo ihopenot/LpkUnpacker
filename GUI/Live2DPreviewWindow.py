@@ -17,7 +17,6 @@ class Live2DPreviewWindow(QWidget):
     def __init__(self, model_path=None):
         super().__init__()
         self.model_path = model_path
-        self.current_model_path = None
         self.live2d_canvas = None
         self.control_panel = None
         self.dragging = False
@@ -30,7 +29,6 @@ class Live2DPreviewWindow(QWidget):
         self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
         self.setWindowFlag(Qt.Tool, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-
         # 设置窗口大小和位置
         self.resize(400, 300)
         self.move_to_screen_center()
@@ -39,7 +37,7 @@ class Live2DPreviewWindow(QWidget):
         self.setup_ui()
 
     # 新增：统一的错误提示
-    def _show_error_infobar(self, content: str, title: str = "加载Live2D模型失败"):
+    def _show_error_infobar(self, content: str, title: str = "Error"):
         try:
             # 优先将 InfoBar 挂到主窗口/其他顶层窗口上，避免当前预览窗口关闭后看不到提示
             parent = QApplication.activeWindow()
@@ -67,28 +65,19 @@ class Live2DPreviewWindow(QWidget):
         layout.setSpacing(0)
 
         # 统一确定模型路径
-        if self.model_path and os.path.exists(self.model_path):
-            model_path_to_use = self.model_path
-        else:
-            model_path_to_use = "./runtime/hiyori_free_t08.model3.json"
-
-        self.current_model_path = model_path_to_use
-
-        # 若文件不存在，直接提示并关闭
-        if not os.path.exists(model_path_to_use):
-            self._show_error_infobar(f"模型文件不存在：{os.path.abspath(model_path_to_use)}")
+        if not self.model_path or not os.path.exists(self.model_path):
+            self._show_error_infobar(f"Model file does not exist: {self.model_path}")
             self.close()
             return
 
         # 创建Live2D显示区域并捕获异常
         try:
-            self.live2d_canvas = Live2DCanvas(model_path_to_use)
+            self.live2d_canvas = Live2DCanvas(self.model_path)
         except Exception as e:
             # 显示错误并关闭窗口
-            self._show_error_infobar(f"{type(e).__name__}: {e}")
+            self._show_error_infobar(f"Unexpected error occurred while loading, {type(e).__name__}: {e}.")
             self.close()
             return
-
         # 设置Live2D widget样式
         self.live2d_canvas.setStyleSheet("""
             Live2DCanvas {
@@ -103,9 +92,7 @@ class Live2DPreviewWindow(QWidget):
 
         # 监听canvas右键
         self.live2d_canvas.installEventFilter(self)
-
         layout.addWidget(self.live2d_canvas)
-
         # 创建控制面板（可隐藏）
         self.control_panel = self.create_control_panel()
         self.control_panel.setVisible(False)  # 默认隐藏
@@ -162,16 +149,15 @@ class Live2DPreviewWindow(QWidget):
         return panel
 
     def _populate_motion_combo(self):
-        """读取model3.json中的动作并填充到下拉框"""
+        """读取model*.json中的动作并填充到下拉框"""
         import json
         self.motion_combo.clear()
         self._motion_items = []
         self._selected_motion = None
-        path = self.current_model_path or self.model_path
-        if not path or not os.path.exists(path):
+        if not self.model_path or not os.path.exists(self.model_path):
             return
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            with open(self.model_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             refs = (data or {}).get('FileReferences') or {}
             groups = refs.get('Motions') or {}
@@ -185,7 +171,7 @@ class Live2DPreviewWindow(QWidget):
         except Exception:
             self._motion_items = []
         if not self._motion_items:
-            self.motion_combo.addItem("(无可用动作)")
+            self.motion_combo.addItem("(No motions available)")
             self.motion_combo.setEnabled(False)
             return
         self.motion_combo.setEnabled(True)
@@ -241,11 +227,11 @@ class Live2DPreviewWindow(QWidget):
                     extra_h = int(self.control_panel.height())
             except Exception:
                 extra_h = 0
-            total_h = (int(h) if isinstance(h, (int, float)) else h) + extra_h
+            total_h = int(h) + extra_h
             try:
                 self.resize(int(w), int(total_h))
             except Exception:
-                self.resize(w, total_h)
+                self._show_error_infobar("Failed to resize preview window.")
 
         # 画布透明度（模型不透明度）
         if 'opacity' in settings and self.live2d_canvas:
@@ -338,5 +324,4 @@ class Live2DPreviewWindow(QWidget):
 
     def contextMenuEvent(self, event):
         """右键菜单事件"""
-        # 可以在这里添加右键菜单功能
         pass

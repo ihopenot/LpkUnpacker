@@ -1,12 +1,73 @@
 import os
+import re
+import json
 
 from PyQt5.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QFileDialog, QWidget, QSplitter
-from PyQt5.QtCore import Qt, pyqtSignal, QTimer
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QCoreApplication
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QColor
 from qfluentwidgets import (SubtitleLabel, BodyLabel, PushButton, Slider, CheckBox, SpinBox, InfoBar, InfoBarPosition,
                            CardWidget, SingleDirectionScrollArea, TextBrowser, ColorDialog)
 
 from GUI.Live2DPreviewWindow import Live2DPreviewWindow
+
+# Helper to check .model<digits>.json pattern
+_def_model_json_pattern = re.compile(r"\.model\d+\.json$", re.IGNORECASE)
+
+def _is_model_json(path: str) -> bool:
+    try:
+        return bool(_def_model_json_pattern.search(path or ""))
+    except Exception:
+        return False
+
+# --- Live2D v3 model json helpers ---
+
+def _is_live2d_v3_json(data: dict) -> bool:
+    try:
+        if not isinstance(data, dict):
+            return False
+        # Common v3 structure: FileReferences with Moc ending in .moc3
+        refs = data.get('FileReferences') or {}
+        if isinstance(refs, dict):
+            moc = refs.get('Moc')
+            if isinstance(moc, str) and moc.lower().endswith('.moc3'):
+                return True
+        # Optional: Version >= 3
+        ver = data.get('Version')
+        if isinstance(ver, int) and ver == 3:
+            return True
+    except Exception:
+        return False
+    return False
+
+def _prepare_and_validate_model_json(path: str):
+    """
+    Validate Live2D v3 model json and pretty-print if needed.
+    Returns (safe_path, temp_created_path or None).
+    Raises Exception on validation failure.
+    """
+    with open(path, 'r', encoding='utf-8') as f:
+        text = f.read()
+    data = json.loads(text)
+    if not _is_live2d_v3_json(data):
+        raise ValueError("Not a valid Live2D v3 model json (missing FileReferences.Moc .moc3)")
+    # Pretty-print to same directory to preserve relative paths
+    base_dir = os.path.dirname(path)
+    base_name = os.path.basename(path)
+    name, ext = os.path.splitext(base_name)
+    pretty_name = f"{name}.pretty{ext or '.json'}"
+    pretty_path = os.path.join(base_dir, pretty_name)
+    if os.path.exists(pretty_path):
+        idx = 1
+        while True:
+            alt = os.path.join(base_dir, f"{name}.pretty{idx}{ext or '.json'}")
+            if not os.path.exists(alt):
+                pretty_path = alt
+                break
+            idx += 1
+    with open(pretty_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write('\n')
+    return pretty_path
 
 class DragDropArea(QFrame):
     """拖拽区域组件"""
@@ -45,7 +106,7 @@ class DragDropArea(QFrame):
         main_text.setAlignment(Qt.AlignCenter)
 
         # 次要提示文字
-        sub_text = BodyLabel("Supported: .model3.json files", self)
+        sub_text = BodyLabel("Supported: .model*.json files", self)
         sub_text.setAlignment(Qt.AlignCenter)
 
         # 额外提示文字
@@ -68,8 +129,8 @@ class DragDropArea(QFrame):
             # 检查是否为Live2D模型文件
             urls = event.mimeData().urls()
             if urls and len(urls) == 1:
-                file_path = urls[0].toLocalFile().lower()
-                if file_path.endswith('.model3.json'):
+                file_path = urls[0].toLocalFile()
+                if _is_model_json(file_path):
                     event.acceptProposedAction()
                     self.setStyleSheet("""
                         #dragDropArea {
@@ -100,8 +161,7 @@ class DragDropArea(QFrame):
         urls = event.mimeData().urls()
         if urls and len(urls) == 1:
             file_path = urls[0].toLocalFile()
-            file_path_lower = file_path.lower()
-            if file_path_lower.endswith('.model3.json') and os.path.exists(file_path):
+            if _is_model_json(file_path) and os.path.exists(file_path):
                 self.fileDropped.emit(file_path)
                 event.acceptProposedAction()
 
@@ -114,11 +174,23 @@ class DragDropArea(QFrame):
             self,
             "Select Live2D Model File",
             "",
-            "Live2D Model Files (*.model3.json)"
+            "Live2D Model Files (*.model*.json);;All Files (*)"
         )
 
         if file_path and os.path.exists(file_path):
-            self.fileDropped.emit(file_path)
+            # 严格校验是否为 .model*.json
+            if _is_model_json(file_path):
+                self.fileDropped.emit(file_path)
+            else:
+                InfoBar.warning(
+                    title="Invalid file type",
+                    content="Please select a .model*.json Live2D model file.",
+                    orient=Qt.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=2500,
+                    parent=self
+                )
 
 class Live2DSettingsPanel(QFrame):
     """Live2D设置面板"""
@@ -566,9 +638,17 @@ class PreviewPage(QFrame):
         # 新增：预览按钮冷却
         self._preview_cooldown_timer = None
         self._preview_cooldown_ms = 1500  # 冷却时长（毫秒）
+        # 新增：记录临时美化的 model json 文件（在新文件载入时清理）
+        self._temp_model_json_path = None
 
         self.setupUI()
-
+        # 应用退出前做一次兜底清理，防止文件句柄未及时释放
+        try:
+            app = QCoreApplication.instance()
+            if app is not None:
+                app.aboutToQuit.connect(self._cleanup_temp_model_json)
+        except Exception:
+            pass
 
     def setupUI(self):
         self.main_layout = QVBoxLayout(self)
@@ -687,25 +767,45 @@ class PreviewPage(QFrame):
             except Exception:
                 pass
 
+    def _cleanup_temp_model_json(self):
+        """删除上一次创建的临时美化 model json（若存在）。"""
+        try:
+            if self._temp_model_json_path and os.path.isfile(self._temp_model_json_path):
+                os.remove(self._temp_model_json_path)
+        except Exception:
+            pass
+
     def on_file_dropped(self, file_path):
         """处理文件拖拽"""
         if not os.path.exists(file_path):
             self.show_error("File not found", f"The file {file_path} does not exist.")
             return
 
-        # 检查文件扩展名，支持.moc3和.model3.json文件
+        # 检查文件扩展名，支持.model*.json文件
         file_ext = file_path.lower()
-        if not (file_ext.endswith('.moc3') or file_ext.endswith('.model3.json')):
+        if not _is_model_json(file_ext):
             self.show_error("Invalid file type",
-                           "Please select a .moc3 or .model3.json Live2D model file.")
+                           "Please select a .model*.json Live2D model file.")
             return
 
-        # 更新当前模型
-        self.current_model_path = file_path
+        # 预处理与校验：确保为 Live2D v3 的 json，生成美化副本
+        try:
+            safe_path = _prepare_and_validate_model_json(file_path)
+        except Exception as e:
+            self.show_error("Invalid Live2D model json",
+                            f"{os.path.basename(file_path)} is not a valid Live2D v3 model json: {e}")
+            return
+
+        # 清理旧的临时文件并保存新的
+        self._cleanup_temp_model_json()
+        self._temp_model_json_path = safe_path
+
+        # 更新当前模型使用美化后的副本
+        self.current_model_path = safe_path
 
         # 显示模型信息
-        model_name = os.path.basename(file_path)
-        model_dir = os.path.dirname(file_path)
+        model_name = os.path.basename(self.current_model_path)
+        model_dir = os.path.dirname(self.current_model_path)
 
         info_text = f"""### Model Loaded ✨
 
@@ -713,7 +813,7 @@ class PreviewPage(QFrame):
 
 **Directory:** `{model_dir}`
 
-**Type:** {'Live2D Model v3 (.moc3)' if file_ext.endswith('.moc3') else 'Live2D Config (.model3.json)'}
+**Type:** Live2D v3 Config (.model*.json)
 
 Ready to preview! 🚀"""
 
@@ -736,7 +836,7 @@ Ready to preview! 🚀"""
     def preview_current_model(self):
         """预览当前模型"""
         if not self.current_model_path:
-            self.show_error("No model selected", "Please drag and drop a .moc3 file first.")
+            self.show_error("No model selected", "Please drag and drop a .model*.json file first.")
             return
 
         # 保证同时仅有一个预览窗口

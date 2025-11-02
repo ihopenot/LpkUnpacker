@@ -284,35 +284,6 @@ class ADPOpenGLCanvas(QOpenGLWidget):
             self.__bg_color = (0.0, 0.0, 0.0, 1.0)
         self.update()
 
-    # Advanced params API
-    def setAdvancedParams(self, enabled: bool, params: dict):
-        self._advanced_enabled = bool(enabled)
-        self._advanced_params = dict(params) if params else {}
-        # Apply immediately using SetParameterValue when available
-        if self._advanced_enabled and self._advanced_params and self.model is not None:
-            set_val = getattr(self.model, "SetParameterValue", None)
-            if callable(set_val):
-                for pid, v in self._advanced_params.items():
-                    try:
-                        set_val(pid, float(v))
-                    except Exception:
-                        continue
-        self.update()
-
-    def _apply_advanced_params(self):
-        m = self.model
-        if m is None or not self._advanced_params:
-            return
-        set_val = getattr(m, "SetParameterValue", None)
-        if not callable(set_val):
-            # If API not available, do nothing to honor request of using SetParameterValue
-            return
-        for pid, v in self._advanced_params.items():
-            try:
-                set_val(pid, float(v))
-            except Exception:
-                continue
-
     @abstractmethod
     def on_init(self):
         pass
@@ -409,37 +380,23 @@ class Live2DCanvas(ADPOpenGLCanvas):
         nx/ny: normalized [-1, 1].
         Priority: SetDrag/SetDragging; fallback to parameter setting.
         """
-        m = self.model
-        if m is None:
+        if self.model is None:
             return
-        # Preferred API used by many LAppModel wrappers
-        for name in ("SetDrag", "SetDragging", "SetMouse"):
-            fn = getattr(m, name, None)
-            if callable(fn):
-                try:
-                    fn(float(nx), float(ny))
-                    return
-                except Exception:
-                    pass
         # Fallback: set common parameter IDs
         angle_x = float(max(-1.0, min(1.0, nx))) * 30.0
         angle_y = float(max(-1.0, min(1.0, ny))) * 30.0
         body_x = float(max(-1.0, min(1.0, nx))) * 10.0
         eye_x = float(max(-1.0, min(1.0, nx)))
         eye_y = float(max(-1.0, min(1.0, ny)))
-        # Candidate setter names in different wrappers
-        setter_candidates = [
-            "SetParamFloat", "SetParameterFloat", "SetParameterValue", "SetParameter",
-        ]
+
         def try_set(param_id: str, value: float):
-            for s in setter_candidates:
-                fn = getattr(m, s, None)
-                if callable(fn):
-                    try:
-                        fn(param_id, float(value))
-                        return True
-                    except Exception:
-                        continue
+            fn = getattr(self.model, "SetParameterValue", None)
+            if callable(fn):
+                try:
+                    fn(param_id, float(value))
+                    return True
+                except Exception:
+                    pass
             return False
         # Apply a few representative parameters (best-effort)
         try_set("ParamAngleX", angle_x)
@@ -480,31 +437,23 @@ class Live2DCanvas(ADPOpenGLCanvas):
         Each item: { 'id': str, 'type': any, 'value': float, 'min': float, 'max': float, 'default': float }
         Returns empty list if model is not ready or API not available.
         """
-        m = self.model
         meta = []
         try:
-            if m is None:
+            if self.model is None:
                 return meta
-            count_attr = getattr(m, 'GetParameterCount', None)
-            getter = getattr(m, 'GetParameter', None)
-            if not callable(getter):
-                return meta
-            if callable(count_attr):
-                n = int(count_attr())
-            else:
-                try:
-                    n = int(count_attr or 0)
-                except Exception:
-                    n = 0
+            try:
+                n = self.model.GetParameterCount()
+            except Exception:
+                n = 0
             for i in range(n):
                 try:
-                    p = getter(i)
-                    pid = getattr(p, 'id', None)
-                    ptype = getattr(p, 'type', None)
-                    pval = float(getattr(p, 'value', 0.0))
-                    pmax = float(getattr(p, 'max', 1.0))
-                    pmin = float(getattr(p, 'min', 0.0))
-                    pdef = float(getattr(p, 'default', 0.0))
+                    p = self.model.GetParameter(i)
+                    pid = p.id
+                    ptype = int(p.type)
+                    pval = float(p.value)
+                    pmax = float(p.max)
+                    pmin = float(p.min)
+                    pdef = float(p.default)
                     if pid is None:
                         continue
                     meta.append({
@@ -521,9 +470,38 @@ class Live2DCanvas(ADPOpenGLCanvas):
             return []
         return meta
 
+    # Advanced params API
+    def setAdvancedParams(self, enabled: bool, params: dict):
+        self._advanced_enabled = bool(enabled)
+        self._advanced_params = dict(params) if params else {}
+        # Apply immediately using SetParameterValue when available
+        if self._advanced_enabled and self._advanced_params and self.model is not None:
+            set_val = getattr(self.model, "SetParameterValue", None)
+            if callable(set_val):
+                for pid, v in self._advanced_params.items():
+                    try:
+                        set_val(pid, float(v))
+                    except Exception:
+                        continue
+        self.update()
+
+    def _apply_advanced_params(self):
+        if self.model is None or not self._advanced_params:
+            return
+        set_val = getattr(self.model, "SetParameterValue", None)
+        if not callable(set_val):
+            # If API not available, do nothing to honor request of using SetParameterValue
+            return
+        for pid, v in self._advanced_params.items():
+            try:
+                set_val(pid, float(v))
+            except Exception:
+                continue
+
     # --- Motion discovery and playback helpers ---
-    def _load_motions_from_model_json(self, model_json_path: str) -> List[Dict[str, Any]]:
-        """Parse the model3.json file to discover motion groups and files.
+    @staticmethod
+    def _load_motions_from_model_json(model_json_path: str) -> List[Dict[str, Any]]:
+        """Parse the Live2D model json (model*.json) to discover motion groups and files.
         Returns a list of items: { 'group': str, 'index': int, 'file': str, 'display': str }
         """
         import os
@@ -567,46 +545,11 @@ class Live2DCanvas(ADPOpenGLCanvas):
         """Try to play a motion by group/index using best-effort API calls.
         Returns True if a call was attempted successfully.
         """
-        m = self.model
-        if m is None:
+        if self.model is None:
             return False
-        # Try common LAppModel APIs
-        candidates = [
-            ('StartMotion', (group, int(index), 1)),
-            ('StartMotionPriority', (group, int(index), 1)),
-            ('StartMotion', (group, int(index))),
-        ]
-        for name, args in candidates:
-            fn = getattr(m, name, None)
-            if callable(fn):
-                try:
-                    fn(*args)
-                    return True
-                except Exception:
-                    continue
-        # Fallback by file path if supported
-        file_item = None
-        for it in self._motions:
-            if it.get('group') == group and int(it.get('index', -1)) == int(index):
-                file_item = it
-                break
-        if file_item is not None:
-            for name in (
-                'StartMotionByFile', 'StartMotionFromFile', 'StartMotionFile', 'PlayMotion', 'LoadAndStartMotion'
-            ):
-                fn = getattr(m, name, None)
-                if callable(fn):
-                    try:
-                        fn(file_item['file'])
-                        return True
-                    except Exception:
-                        continue
-        # As a last resort, try random motion in the group
-        rnd = getattr(m, 'StartRandomMotion', None)
-        if callable(rnd):
-            try:
-                rnd(group, 1)
-                return True
-            except Exception:
-                pass
+        try:
+            self.model.StartMotion(group, index, 1)
+            return True
+        except Exception:
+            pass
         return False
