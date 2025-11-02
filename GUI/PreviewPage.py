@@ -11,7 +11,7 @@ from qfluentwidgets import (SubtitleLabel, BodyLabel, PushButton, Slider, CheckB
 from GUI.Live2DPreviewWindow import Live2DPreviewWindow
 
 # Helper to check *model*.json pattern
-_def_model_json_pattern = re.compile(r"model\d+\.json$", re.IGNORECASE)
+_def_model_json_pattern = re.compile(r"model\d*\.json$", re.IGNORECASE)
 
 def _is_model_json(path: str) -> bool:
     try:
