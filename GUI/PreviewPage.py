@@ -10,8 +10,8 @@ from qfluentwidgets import (SubtitleLabel, BodyLabel, PushButton, Slider, CheckB
 
 from GUI.Live2DPreviewWindow import Live2DPreviewWindow
 
-# Helper to check .model<digits>.json pattern
-_def_model_json_pattern = re.compile(r"\.model\d+\.json$", re.IGNORECASE)
+# Helper to check *model*.json pattern
+_def_model_json_pattern = re.compile(r"model\d+\.json$", re.IGNORECASE)
 
 def _is_model_json(path: str) -> bool:
     try:
@@ -106,7 +106,7 @@ class DragDropArea(QFrame):
         main_text.setAlignment(Qt.AlignCenter)
 
         # 次要提示文字
-        sub_text = BodyLabel("Supported: .model*.json files", self)
+        sub_text = BodyLabel("Supported: *model*.json files", self)
         sub_text.setAlignment(Qt.AlignCenter)
 
         # 额外提示文字
@@ -174,17 +174,17 @@ class DragDropArea(QFrame):
             self,
             "Select Live2D Model File",
             "",
-            "Live2D Model Files (*.model*.json);;All Files (*)"
+            "Live2D Model Files (*model*.json);;All Files (*)"
         )
 
         if file_path and os.path.exists(file_path):
-            # 严格校验是否为 .model*.json
+            # 严格校验是否为 *model*.json
             if _is_model_json(file_path):
                 self.fileDropped.emit(file_path)
             else:
                 InfoBar.warning(
                     title="Invalid file type",
-                    content="Please select a .model*.json Live2D model file.",
+                    content="Please select a *model*.json Live2D model file.",
                     orient=Qt.Horizontal,
                     isClosable=True,
                     position=InfoBarPosition.TOP,
@@ -781,11 +781,11 @@ class PreviewPage(QFrame):
             self.show_error("File not found", f"The file {file_path} does not exist.")
             return
 
-        # 检查文件扩展名，支持.model*.json文件
+        # 检查文件扩展名，支持*model*.json文件
         file_ext = file_path.lower()
         if not _is_model_json(file_ext):
             self.show_error("Invalid file type",
-                           "Please select a .model*.json Live2D model file.")
+                           "Please select a *model*.json Live2D model file.")
             return
 
         # 预处理与校验：确保为 Live2D v3 的 json，生成美化副本
@@ -813,7 +813,7 @@ class PreviewPage(QFrame):
 
 **Directory:** `{model_dir}`
 
-**Type:** Live2D v3 Config (.model*.json)
+**Type:** Live2D v3 Config (*model*.json)
 
 Ready to preview! 🚀"""
 
@@ -836,7 +836,7 @@ Ready to preview! 🚀"""
     def preview_current_model(self):
         """预览当前模型"""
         if not self.current_model_path:
-            self.show_error("No model selected", "Please drag and drop a .model*.json file first.")
+            self.show_error("No model selected", "Please drag and drop a *model*.json file first.")
             return
 
         # 保证同时仅有一个预览窗口
