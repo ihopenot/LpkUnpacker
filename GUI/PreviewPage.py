@@ -46,7 +46,7 @@ def _fix_model_motions(model_json: dict, base_dir: str):
     """Fix motion3.json files referenced by the model json in-place using motion_fixed.
     base_dir: absolute directory containing the model json; motions are resolved relative to this.
     """
-    if motion_fixed is None or not isinstance(model_json, dict):
+    if not isinstance(model_json, dict):
         return
     refs = model_json.get('FileReferences') or {}
     motions = refs.get('Motions') or {}
