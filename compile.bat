@@ -47,13 +47,12 @@ REM Main compilation command
 python -m nuitka --onefile ^
     --enable-plugin=pyqt5 ^
     --output-dir=build ^
-    --windows-disable-console ^
+    --windows-console-mode=disable ^
     --include-data-dir=./Img=Img ^
-    --include-data-dir=./GUI/assets=GUI/assets ^
     --include-package=qfluentwidgets ^
     --include-package=filetype ^
     --windows-icon-from-ico=Img/icon.ico ^
-    --nofollow-import-to=numpy,matplotlib,scipy,pandas,tkinter ^
+    --nofollow-import-to=matplotlib,scipy,pandas,tkinter ^
     --python-flag=no_site ^
     --python-flag=no_docstrings ^
     --remove-output ^

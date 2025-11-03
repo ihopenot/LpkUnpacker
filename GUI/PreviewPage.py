@@ -1,166 +1,72 @@
 import os
-from PyQt5.QtWidgets import (QFrame, QVBoxLayout, QHBoxLayout, QLabel, QApplication, 
-                             QSizePolicy, QFileDialog, QMessageBox)
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QFont, QDragEnterEvent, QDropEvent
-from qfluentwidgets import SubtitleLabel, PushButton, InfoBar, InfoBarPosition
-from .WebLive2DWidget import WebLive2DWidget
+from PyQt5.QtWidgets import (QFrame, QVBoxLayout, QLabel, QApplication, QSizePolicy)
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont
+from qfluentwidgets import SubtitleLabel
 
 class PreviewPage(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName('previewPage')  # Required for navigation
         
-        # 启用拖拽功能
-        self.setAcceptDrops(True)
-        
-        # 当前加载的模型路径
-        self.current_model_path = None
-        
         self.setupUI()
-        
-        # 响应窗口大小变化
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        
+        # 应用退出前做一次兜底清理，防止文件句柄未及时释放
+        try:
+            app = QCoreApplication.instance()
+            if app is not None:
+                app.aboutToQuit.connect(self._cleanup_temp_model_json)
+        except Exception:
+            pass
+
     def setupUI(self):
-        """设置简化的用户界面"""
         # Main layout
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(10, 10, 10, 10)
-        self.main_layout.setSpacing(10)
-        
-        # Header with title and basic controls
-        self.header_layout = QHBoxLayout()
+        self.main_layout.setContentsMargins(20, 20, 20, 20)
+        self.main_layout.setSpacing(15)
         
         # Title
-        self.title_label = SubtitleLabel("Live2D 模型预览器", self)
-        self.header_layout.addWidget(self.title_label)
-        
-        # Spacer
-        self.header_layout.addStretch()
-        
-        # Quick load button (for fallback)
-        self.quick_load_button = PushButton("快速加载", self)
-        self.quick_load_button.clicked.connect(self.quick_load_model)
-        self.header_layout.addWidget(self.quick_load_button)
-        
-        self.main_layout.addLayout(self.header_layout)
-        
-        # Web-based Live2D Widget (takes up most of the space)
-        self.live2d_widget = WebLive2DWidget(self)
-        self.live2d_widget.setMinimumSize(800, 600)
-        self.main_layout.addWidget(self.live2d_widget, 1)
-        
-        # Status bar
-        self.status_label = QLabel("拖拽Live2D模型文件夹到此处，或点击左侧控制面板选择文件夹", self)
-        self.status_label.setAlignment(Qt.AlignCenter)
-        self.status_label.setStyleSheet("""
-            QLabel {
-                color: #606060; 
-                font-style: italic; 
-                padding: 8px;
-                background-color: rgba(240, 240, 240, 0.5);
-                border-radius: 4px;
-                margin: 5px;
-            }
+        self.title_label = SubtitleLabel("Live2D Preview", self)
+        self.main_layout.addWidget(self.title_label)
+
+        # Coming Soon frame
+        self.coming_soon_frame = QFrame(self)
+        self.coming_soon_frame.setStyleSheet("""
+            background-color: #f0f0f0;
+            border-radius: 8px;
+            padding: 20px;
         """)
-        self.main_layout.addWidget(self.status_label)
+        coming_soon_layout = QVBoxLayout(self.coming_soon_frame)
         
-        # Connect signals
-        self.live2d_widget.modelLoaded.connect(self.on_model_loaded)
-        self.live2d_widget.modelLoadFailed.connect(self.on_model_load_failed)
-        self.live2d_widget.statusChanged.connect(self.on_status_changed)
+        # Header
+        coming_soon_title = SubtitleLabel("Coming Soon", self.coming_soon_frame)
+        coming_soon_title.setAlignment(Qt.AlignCenter)
+        coming_soon_title.setStyleSheet("font-size: 24px; font-weight: bold; color: #606060;")
         
-    def quick_load_model(self):
-        """快速加载模型（备用方法）"""
-        default_path = "D:/1awd/game/output" if os.path.exists("D:/1awd/game/output") else ""
-        folder_path = QFileDialog.getExistingDirectory(
-            self, "选择Live2D模型文件夹", default_path
+        # Description
+        description = QLabel(
+            "The Live2D model preview feature is under development and will be available in a future update.",
+            self.coming_soon_frame
         )
+        description.setAlignment(Qt.AlignCenter)
+        description.setWordWrap(True)
+        description.setStyleSheet("font-size: 14px; color: #505050; margin: 10px;")
         
-        if folder_path:
-            self.live2d_widget.loadModelFromFolder(folder_path)
+        # Add widgets to layout
+        coming_soon_layout.addWidget(coming_soon_title)
+        coming_soon_layout.addWidget(description)
+        coming_soon_layout.setAlignment(Qt.AlignCenter)
+        
+        # Add to main layout
+        self.main_layout.addWidget(self.coming_soon_frame, 1)
             
-    def dragEnterEvent(self, event: QDragEnterEvent):
-        """拖拽进入事件"""
-        if event.mimeData().hasUrls():
-            # 检查是否为文件夹或.json文件
-            urls = event.mimeData().urls()
-            if urls:
-                path = urls[0].toLocalFile()
-                if os.path.isdir(path) or path.lower().endswith('.json'):
-                    event.acceptProposedAction()
-                    self.status_label.setText("松开鼠标以加载模型")
-                    return
-        event.ignore()
+    def updateUIScale(self, window_width, window_height):
+        """根据窗口大小调整UI元素"""
+        # 计算比例因子
+        scale_factor = max(1.0, window_width / 1000.0)
         
-    def dragLeaveEvent(self, event):
-        """拖拽离开事件"""
-        self.status_label.setText("拖拽Live2D模型文件夹到此处，或点击左侧控制面板选择文件夹")
-        
-    def dropEvent(self, event: QDropEvent):
-        """拖拽放下事件"""
-        if event.mimeData().hasUrls():
-            urls = event.mimeData().urls()
-            if urls:
-                path = urls[0].toLocalFile()
-                
-                if os.path.isdir(path):
-                    # 如果是文件夹，直接加载
-                    self.live2d_widget.loadModelFromFolder(path)
-                elif path.lower().endswith('.json'):
-                    # 如果是json文件，加载其所在文件夹
-                    folder_path = os.path.dirname(path)
-                    self.live2d_widget.loadModelFromFolder(folder_path)
-                    
-                event.acceptProposedAction()
-                return
-                
-        event.ignore()
-        self.status_label.setText("无效的文件类型，请拖拽Live2D模型文件夹或.json文件")
-        
-    def on_model_loaded(self, model_path):
-        """模型加载成功回调"""
-        self.current_model_path = model_path
-        model_name = os.path.basename(os.path.dirname(model_path))
-        self.status_label.setText(f"✅ 模型加载成功: {model_name}")
-        
-        # 显示成功信息条
-        InfoBar.success(
-            title="模型加载成功",
-            content=f"已成功加载 {model_name}",
-            orient=Qt.Horizontal,
-            isClosable=True,
-            position=InfoBarPosition.TOP,
-            duration=3000,
-            parent=self
-        )
-        
-    def on_model_load_failed(self, error_message):
-        """模型加载失败回调"""
-        self.status_label.setText(f"❌ 模型加载失败: {error_message}")
-        
-        # 显示错误信息条
-        InfoBar.error(
-            title="模型加载失败",
-            content=error_message,
-            orient=Qt.Horizontal,
-            isClosable=True,
-            position=InfoBarPosition.TOP,
-            duration=5000,
-            parent=self
-        )
-        
-    def on_status_changed(self, status):
-        """状态改变回调"""
-        self.status_label.setText(status)
-        
-    def cleanup(self):
-        """清理资源"""
-        if hasattr(self.live2d_widget, 'cleanup'):
-            self.live2d_widget.cleanup()
-            
-    def closeEvent(self, event):
-        """窗口关闭事件"""
-        self.cleanup()
-        super().closeEvent(event)
+        # 调整字体大小
+        font = QApplication.instance().font()
+        for label in self.findChildren(SubtitleLabel):
+            label_font = label.font()
+            label_font.setPointSize(font.pointSize() + 2)  # 标题字体比正常字体大2点
+            label.setFont(label_font)

@@ -7,8 +7,9 @@ from PyQt5.QtGui import QIcon
 # 在创建QApplication之前设置QtWebEngine所需的属性
 QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
 # 确保设置正确的属性来支持高DPI缩放
-QCoreApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-QCoreApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
+QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
+QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
 
 # 预先导入QtWebEngineWidgets以确保正确初始化
 try:
