@@ -2,3 +2,4 @@ venv/
 settings.json
 build/
 __pycache__/
+start.bat

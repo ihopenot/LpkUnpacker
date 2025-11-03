@@ -47,17 +47,7 @@ class WebPreviewPage(QFrame):
             
     def setupLive2DUI(self):
         """设置Web Live2D预览界面"""
-        # 控制按钮区域
-        control_frame = QFrame(self)
-        control_layout = QHBoxLayout(control_frame)
-        
-        # 选择模型按钮
-        self.select_model_btn = PushButton("Select Live2D Model", self)
-        self.select_model_btn.clicked.connect(self.selectModel)
-        control_layout.addWidget(self.select_model_btn)
-        
-        control_layout.addStretch()
-        self.main_layout.addWidget(control_frame)
+        # 移除重复的选择模型按钮，WebLive2DWidget内部已经有了
         
         # Live2D预览区域容器
         self.preview_container = QFrame(self)
@@ -111,21 +101,7 @@ class WebPreviewPage(QFrame):
         # Add to main layout
         self.main_layout.addWidget(self.error_frame, 1)
     
-    def selectModel(self):
-        """选择Live2D模型"""
-        folder_path = QFileDialog.getExistingDirectory(
-            self, 
-            "Select Live2D Model Folder",
-            "",
-            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
-        )
-        
-        if folder_path:
-            self.current_model_path = folder_path
-            
-            # 加载模型
-            if self.current_model_path:
-                self.loadCurrentModel()
+    # selectModel方法已移除，使用WebLive2DWidget内部的选择功能
     
     def onModelLoaded(self, model_path):
         """模型加载成功回调"""        
