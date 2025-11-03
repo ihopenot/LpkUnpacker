@@ -87,17 +87,6 @@ class WebLive2DWidget(QWidget):
 
         layout.addWidget(motion_group)
 
-        # 独立窗口控制区域
-        window_group = QGroupBox("Independent Window")
-        window_layout = QVBoxLayout(window_group)
-
-        self.open_window_btn = QPushButton("Open Independent Preview Window")
-        self.open_window_btn.clicked.connect(self.openIndependentWindow)
-        self.open_window_btn.setEnabled(False)  # 初始禁用，加载模型后启用
-        window_layout.addWidget(self.open_window_btn)
-
-        layout.addWidget(window_group)
-
         # 画布设置区域
         canvas_group = QGroupBox("Canvas Settings")
         canvas_layout = QVBoxLayout(canvas_group)
@@ -257,9 +246,6 @@ class WebLive2DWidget(QWidget):
 
             self.modelLoaded.emit(str(model_file))
             self.addStatusMessage(f"Successfully loaded model: {model_file.name}")
-            
-            # 启用独立窗口按钮
-            self.open_window_btn.setEnabled(True)
 
         except Exception as e:
             self.modelLoadFailed.emit(str(e))
@@ -305,34 +291,6 @@ class WebLive2DWidget(QWidget):
         if motion_file:
             self.sendMessageToWeb('playMotion', {'motion': motion_file})
             self.addStatusMessage(f"Play motion: {item.text()}")
-
-    def openIndependentWindow(self):
-        """打开独立Live2D预览窗口"""
-        if not self.current_model_path:
-            self.addStatusMessage("Error: No model selected")
-            return
-            
-        # 查找模型文件
-        model_files = list(Path(self.current_model_path).glob("*.json"))
-        if not model_files:
-            self.addStatusMessage("Error: Model file not found")
-            return
-            
-        model_file = model_files[0]
-        
-        try:
-            # 导入Live2DPreviewWindow
-            from GUI.Live2DPreviewWindow import Live2DPreviewWindow
-            
-            # 创建并显示独立预览窗口
-            self.preview_window = Live2DPreviewWindow(str(model_file))
-            self.preview_window.show()
-            self.addStatusMessage(f"Opened independent preview window: {model_file.name}")
-            
-        except ImportError:
-            self.addStatusMessage("Error: Live2D independent preview feature unavailable")
-        except Exception as e:
-            self.addStatusMessage(f"Failed to open independent window: {str(e)}")
 
     def sendMessageToWeb(self, msg_type, data):
         """向Web视图发送消息"""

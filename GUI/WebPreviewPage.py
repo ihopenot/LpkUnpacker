@@ -13,13 +13,6 @@ except ImportError as e:
     print(f"Live2D components not available: {e}")
     LIVE2D_AVAILABLE = False
 
-try:
-    from GUI.Live2DPreviewWindow import Live2DPreviewWindow
-    NATIVE_LIVE2D_AVAILABLE = True
-except ImportError as e:
-    print(f"Native Live2D components not available: {e}")
-    NATIVE_LIVE2D_AVAILABLE = False
-
 
 class WebPreviewPage(QFrame):
     def __init__(self, parent=None):
@@ -129,9 +122,6 @@ class WebPreviewPage(QFrame):
         
         if folder_path:
             self.current_model_path = folder_path
-            # 启用独立预览窗口按钮
-            if NATIVE_LIVE2D_AVAILABLE and hasattr(self, 'open_window_btn'):
-                self.open_window_btn.setEnabled(True)
             
             # 加载模型
             if self.current_model_path:
@@ -238,12 +228,6 @@ class WebPreviewPage(QFrame):
         try:
             if hasattr(self, 'live2d_widget') and self.live2d_widget:
                 self.live2d_widget.cleanup()
-        except Exception:
-            pass
-        
-        try:
-            if self.preview_window:
-                self.preview_window.close()
         except Exception:
             pass
             
