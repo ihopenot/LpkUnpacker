@@ -96,6 +96,9 @@ class SteamIntegration:
                     # Try to get workshop item info
                     item_info = self.get_workshop_item_info(item_id, item_path)
                     
+                    # Search for preview images
+                    preview_image = self.find_preview_image(item_path)
+                    
                     workshop_items.append({
                         'item_id': item_id,
                         'item_path': item_path,
@@ -103,7 +106,8 @@ class SteamIntegration:
                         'config_files': config_files,
                         'title': item_info.get('title', f'Workshop Item {item_id}'),
                         'description': item_info.get('description', ''),
-                        'size': self.get_directory_size(item_path)
+                        'size': self.get_directory_size(item_path),
+                        'preview_image': preview_image
                     })
                     
         except Exception as e:
@@ -146,6 +150,66 @@ class SteamIntegration:
                     pass
         
         return info
+    
+    def find_preview_image(self, item_path: str) -> Optional[str]:
+        """Find preview image in workshop item directory"""
+        # Common preview image names and extensions
+        preview_names = [
+            'preview', 'thumbnail', 'icon', 'cover', 'image', 
+            'screenshot', 'pic', 'photo', 'img'
+        ]
+        image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+        
+        try:
+            # Search in the root directory first
+            for file in os.listdir(item_path):
+                file_lower = file.lower()
+                file_path = os.path.join(item_path, file)
+                
+                # Check if it's an image file
+                if any(file_lower.endswith(ext) for ext in image_extensions):
+                    # Check if filename contains preview-related keywords
+                    if any(name in file_lower for name in preview_names):
+                        if os.path.isfile(file_path):
+                            logger.debug(f"Found preview image: {file_path}")
+                            return file_path
+            
+            # If no preview found in root, search subdirectories (limited depth)
+            for root, dirs, files in os.walk(item_path):
+                # Limit search depth to avoid performance issues
+                depth = root[len(item_path):].count(os.sep)
+                if depth >= 2:
+                    dirs[:] = []  # Don't go deeper
+                    continue
+                    
+                for file in files:
+                    file_lower = file.lower()
+                    file_path = os.path.join(root, file)
+                    
+                    # Check if it's an image file with preview-related name
+                    if any(file_lower.endswith(ext) for ext in image_extensions):
+                        if any(name in file_lower for name in preview_names):
+                            logger.debug(f"Found preview image in subdirectory: {file_path}")
+                            return file_path
+            
+            # If still no preview found, return the first image file found
+            for root, dirs, files in os.walk(item_path):
+                depth = root[len(item_path):].count(os.sep)
+                if depth >= 2:
+                    dirs[:] = []
+                    continue
+                    
+                for file in files:
+                    file_lower = file.lower()
+                    if any(file_lower.endswith(ext) for ext in image_extensions):
+                        file_path = os.path.join(root, file)
+                        logger.debug(f"Using first available image as preview: {file_path}")
+                        return file_path
+                        
+        except Exception as e:
+            logger.debug(f"Error searching for preview image in {item_path}: {e}")
+            
+        return None
     
     def get_directory_size(self, path: str) -> int:
         """Get total size of directory in bytes"""

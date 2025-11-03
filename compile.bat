@@ -49,6 +49,7 @@ python -m nuitka --onefile ^
     --output-dir=build ^
     --windows-disable-console ^
     --include-data-dir=./Img=Img ^
+    --include-data-dir=./GUI/assets=GUI/assets ^
     --include-package=qfluentwidgets ^
     --include-package=filetype ^
     --windows-icon-from-ico=Img/icon.ico ^

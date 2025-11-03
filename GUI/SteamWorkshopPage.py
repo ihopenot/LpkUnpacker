@@ -4,9 +4,10 @@ from typing import List, Dict
 from PyQt5.QtCore import pyqtSignal, QThread, Qt, QTimer
 from PyQt5.QtWidgets import (
     QWidget, QFrame, QVBoxLayout, QHBoxLayout, QGridLayout, 
-    QFileDialog, QApplication, QSizePolicy, QHeaderView, QAbstractItemView
+    QFileDialog, QApplication, QSizePolicy, QHeaderView, QAbstractItemView,
+    QLabel
 )
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QPixmap
 from qfluentwidgets import (
     PushButton, LineEdit, ComboBox, ProgressBar, TextEdit, SubtitleLabel,
     FluentIcon, InfoBar, InfoBarPosition, MessageBox, TableWidget,
@@ -106,9 +107,31 @@ class WorkshopItemCard(CardWidget):
         self.setupUI()
         
     def setupUI(self):
-        self.setFixedHeight(120)
-        layout = QVBoxLayout(self)
+        self.setFixedHeight(140)  # Increased height to accommodate preview image
+        layout = QHBoxLayout(self)  # Changed to horizontal layout
         layout.setContentsMargins(15, 10, 15, 10)
+        
+        # Preview image section
+        self.preview_label = QLabel()
+        self.preview_label.setFixedSize(100, 100)
+        self.preview_label.setStyleSheet("""
+            QLabel {
+                border: 2px solid #E0E0E0;
+                border-radius: 8px;
+                background-color: #F5F5F5;
+            }
+        """)
+        self.preview_label.setAlignment(Qt.AlignCenter)
+        self.preview_label.setScaledContents(True)
+        
+        # Load preview image if available
+        self.load_preview_image()
+        
+        layout.addWidget(self.preview_label)
+        
+        # Content section
+        content_layout = QVBoxLayout()
+        content_layout.setSpacing(8)
         
         # Header with checkbox and title
         header_layout = QHBoxLayout()
@@ -123,6 +146,7 @@ class WorkshopItemCard(CardWidget):
         
         # Info layout
         info_layout = QGridLayout()
+        info_layout.setSpacing(5)
         
         # Item ID
         info_layout.addWidget(BodyLabel("Item ID:"), 0, 0)
@@ -143,8 +167,46 @@ class WorkshopItemCard(CardWidget):
         info_layout.addWidget(BodyLabel("Config Files:"), 1, 2)
         info_layout.addWidget(CaptionLabel(str(config_count)), 1, 3)
         
-        layout.addLayout(header_layout)
-        layout.addLayout(info_layout)
+        content_layout.addLayout(header_layout)
+        content_layout.addLayout(info_layout)
+        
+        layout.addLayout(content_layout, 1)  # Give content more space
+        
+    def load_preview_image(self):
+        """Load and display preview image"""
+        preview_path = self.item_data.get('preview_image')
+        
+        if preview_path and os.path.exists(preview_path):
+            try:
+                pixmap = QPixmap(preview_path)
+                if not pixmap.isNull():
+                    # Scale the image to fit the label while maintaining aspect ratio
+                    scaled_pixmap = pixmap.scaled(
+                        self.preview_label.size(), 
+                        Qt.KeepAspectRatio, 
+                        Qt.SmoothTransformation
+                    )
+                    self.preview_label.setPixmap(scaled_pixmap)
+                else:
+                    self.set_no_preview_text()
+            except Exception as e:
+                logging.debug(f"Failed to load preview image {preview_path}: {e}")
+                self.set_no_preview_text()
+        else:
+            self.set_no_preview_text()
+    
+    def set_no_preview_text(self):
+        """Set text when no preview image is available"""
+        self.preview_label.setText("No Preview\nAvailable")
+        self.preview_label.setStyleSheet("""
+            QLabel {
+                border: 2px solid #E0E0E0;
+                border-radius: 8px;
+                background-color: #F5F5F5;
+                color: #888888;
+                font-size: 12px;
+            }
+        """)
         
     def format_size(self, size_bytes: int) -> str:
         """Format size in human readable format"""

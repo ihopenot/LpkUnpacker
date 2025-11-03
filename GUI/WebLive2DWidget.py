@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 from pathlib import Path
 from PyQt5.QtWidgets import (
@@ -152,12 +153,37 @@ class WebLive2DWidget(QWidget):
 
     def setupWebContent(self):
         """设置Web内容（加载静态HTML）"""
-        assets_path = Path(__file__).parent / "assets" / "live2d" / "index.html"
-        if not assets_path.exists():
-            err = f"缺少Web预览HTML文件: {assets_path}"
+        # 兼容打包后的资源路径
+        if getattr(sys, 'frozen', False):
+            # 打包后的可执行文件 - Nuitka会将资源放在可执行文件同目录
+            base_path = Path(sys.executable).parent
+            # 尝试多个可能的路径
+            possible_paths = [
+                base_path / "GUI" / "assets" / "live2d" / "index.html",
+                base_path / "assets" / "live2d" / "index.html", 
+                Path(os.getcwd()) / "GUI" / "assets" / "live2d" / "index.html"
+            ]
+        else:
+            # 开发环境
+            base_path = Path(__file__).parent
+            possible_paths = [
+                base_path / "assets" / "live2d" / "index.html",
+                base_path.parent / "GUI" / "assets" / "live2d" / "index.html"
+            ]
+            
+        assets_path = None
+        for path in possible_paths:
+            if path.exists():
+                assets_path = path
+                break
+                
+        if assets_path is None:
+            err = f"缺少Web预览HTML文件，尝试过的路径: {[str(p) for p in possible_paths]}"
             print(err)
             self.statusChanged.emit(err)
             return
+            
+        print(f"加载Live2D HTML文件: {assets_path}")
         self.web_view.load(QUrl.fromLocalFile(str(assets_path.resolve())))
 
     def selectModelFolder(self):
