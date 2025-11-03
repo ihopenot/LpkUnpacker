@@ -58,6 +58,19 @@ except Exception as e:
             self.setObjectName('steamWorkshopPage')
             QHBoxLayout(self).addWidget(QFrame(self))
 
+try:
+    from GUI.WebPreviewPage import WebPreviewPage
+except Exception as e:
+    import traceback
+    print(f"Error importing WebPreviewPage: {e}")
+    traceback.print_exc()
+    # Create a dummy page
+    class WebPreviewPage(QFrame):
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.setObjectName('webPreviewPage')
+            QHBoxLayout(self).addWidget(QFrame(self))
+
 
 class MainWindow(FluentWindow):
     """ Main Window with Navigation """
@@ -97,6 +110,13 @@ class MainWindow(FluentWindow):
             print(f"Error creating SteamWorkshopPage: {e}")
             self.steamWorkshopPage = QFrame(self)
             self.steamWorkshopPage.setObjectName('steamWorkshopPage')
+            
+        try:
+            self.webPreviewPage = WebPreviewPage(self)
+        except Exception as e:
+            print(f"Error creating WebPreviewPage: {e}")
+            self.webPreviewPage = QFrame(self)
+            self.webPreviewPage.setObjectName('webPreviewPage')
 
         self.initWindow()
         self.initNavigation()
@@ -127,9 +147,14 @@ class MainWindow(FluentWindow):
             print(f"Error adding SteamWorkshopPage to navigation: {e}")
             
         try:
-            self.addSubInterface(self.previewPage, FIF.MOVIE, 'Live2D Preview')
+            self.addSubInterface(self.previewPage, FIF.MOVIE, 'Live2D Preview (Native)')
         except Exception as e:
             print(f"Error adding PreviewPage to navigation: {e}")
+            
+        try:
+            self.addSubInterface(self.webPreviewPage, FIF.GLOBE, 'Live2D Preview (Web)')
+        except Exception as e:
+            print(f"Error adding WebPreviewPage to navigation: {e}")
 
         self.navigationInterface.addSeparator()
             

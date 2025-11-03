@@ -4,17 +4,17 @@
     <meta charset="UTF-8">
     <title>Live2D Preview</title>
     <!-- Live2D Cubism Core (v4) & Live2D v2 runtime -->
-    <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/dylanNew/live2d/webgl/Live2D/lib/live2d.min.js"></script>
+    <script src="../vender/live2dcubismcore.min.js"></script>
+    <script src="../vender/live2d.min.js"></script>
 
     <!-- PixiJS v6 and expose to window for plugin -->
-    <script src="https://cdn.jsdelivr.net/npm/pixi.js@6.5.2/dist/browser/pixi.min.js"></script>
+    <script src="../vender/pixi.min.js"></script>
     <script>
         window.PIXI = PIXI;
     </script>
 
     <!-- pixi-live2d-display（同时支持 Cubism 2.1 与 4） -->
-    <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/index.min.js"></script>
+    <script src="../vender/index.min.js"></script>
     
     <style>
         body {
@@ -110,64 +110,44 @@
             font-weight: bold;
             color: #ffd93d;
         }
-        .parameter-display {
-            display: flex;
-            justify-content: space-between;
-            margin: 2px 0;
-        }
     </style>
 </head>
 <body>
     <div id="loading">
         <div class="spinner"></div>
-        <div>准备Live2D预览器...</div>
+        <div>Preparing Live2D Previewer...</div>
         <div style="font-size: 12px; margin-top: 10px; opacity: 0.8;">
-            正在加载渲染引擎...
+            Loading rendering engine...
         </div>
     </div>
     
     <div id="error" style="display: none;">
-        <h3>❌ 加载失败</h3>
-        <p id="error-message">未知错误</p>
+        <h3>❌ Loading Failed</h3>
+        <p id="error-message">Unknown error</p>
         <div style="font-size: 12px; margin-top: 15px; opacity: 0.8;">
-            请检查网络连接或刷新页面重试
+            Please check network connection or refresh page to retry
         </div>
     </div>
     
     <div id="info" style="display: none;">
         <div class="info-section">
-            <div class="info-label">🎭 Live2D Web预览器</div>
+            <div class="info-label">🎭 Live2D Web Previewer</div>
         </div>
         <div class="info-section">
-            <div class="info-label">模型信息</div>
-            <div id="model-info">未加载模型</div>
+            <div class="info-label">Model Info</div>
+            <div id="model-info">No model loaded</div>
         </div>
         <div class="info-section">
-            <div class="info-label">表情</div>
-            <div id="expression-info">无</div>
+            <div class="info-label">Expression</div>
+            <div id="expression-info">None</div>
         </div>
         <div class="info-section">
-            <div class="info-label">动作</div>
-            <div id="motion-info">无</div>
-        </div>
-        <div class="info-section">
-            <div class="info-label">参数调节</div>
-            <div class="parameter-display">
-                <span>眼部开合:</span>
-                <span id="eye-value">100%</span>
-            </div>
-            <div class="parameter-display">
-                <span>嘴部开合:</span>
-                <span id="mouth-value">0%</span>
-            </div>
-            <div class="parameter-display">
-                <span>头部角度:</span>
-                <span id="angle-value">0.0°</span>
-            </div>
+            <div class="info-label">Motion</div>
+            <div id="motion-info">None</div>
         </div>
     </div>
     <div id="ui-controls">
-        <button id="toggle-info" title="快捷键：H 或 双击画布">隐藏面板 [H]</button>
+        <button id="toggle-info" title="Shortcut: H or Double-click canvas">Hide Panel [H]</button>
     </div>
     
     <canvas id="canvas" width="800" height="600" style="display: none;"></canvas>
@@ -181,13 +161,6 @@
                 this.modelData = null;
                 this.currentExpression = null;
                 this.currentMotion = null;
-                this.parameters = {
-                    eyeOpen: 1.0,
-                    mouthOpen: 0.0,
-                    angleX: 0.0,
-                    angleY: 0.0,
-                    angleZ: 0.0
-                };
                 this.init();
             }
             
@@ -195,7 +168,7 @@
                 try {
                     // 检查Live2D SDK是否加载
                     if (typeof PIXI === 'undefined') {
-                        throw new Error('PIXI.js未加载');
+                        throw new Error('PIXI.js not loaded');
                     }
                     
                     // 初始化PIXI应用
@@ -241,7 +214,7 @@
                     this.sendMessage('ready', {});
                     
                 } catch (error) {
-                    this.showError('初始化失败: ' + error.message);
+                    this.showError('Initialization failed: ' + error.message);
                 }
             }
             
@@ -263,7 +236,7 @@
                     dropShadowDistance: 2
                 });
                 
-                const text = new PIXI.Text('请选择Live2D模型文件夹', style);
+                const text = new PIXI.Text('Please select Live2D model folder', style);
                 text.anchor.set(0.5);
                 text.x = this.app.renderer.width / 2;
                 text.y = this.app.renderer.height / 2;
@@ -309,9 +282,18 @@
                         case 'toggleInfo':
                             this.toggleInfoPanel(typeof data.visible === 'boolean' ? data.visible : undefined);
                             break;
+                        case 'setCanvasOpacity':
+                            this.setCanvasOpacity(data.opacity);
+                            break;
+                        case 'setRotationAngle':
+                            this.setRotationAngle(data.angle);
+                            break;
+                        case 'setBackground':
+                            this.setBackground(data.transparent, data.color);
+                            break;
                     }
                 } catch (error) {
-                    this.showError('处理消息失败: ' + error.message);
+                    this.showError('Message processing failed: ' + error.message);
                 }
             }
             
@@ -355,17 +337,17 @@
                         });
                         
                     } else {
-                        throw new Error('Live2D库未加载');
+                        throw new Error('Live2D library not loaded');
                     }
                     
                     // 更新UI
                     const name = (modelPath || '').split(/[\\\/]/).pop();
-                    document.getElementById('model-info').textContent = `模型: ${name || '未知'}`;
+                    document.getElementById('model-info').textContent = `Model: ${name || 'Unknown'}`;
                     this.sendMessage('modelLoaded', { path: modelPath });
                     
                 } catch (error) {
                     console.error('模型加载失败:', error);
-                    this.showError('模型加载失败: ' + error.message);
+                    this.showError('Model loading failed: ' + error.message);
                     this.sendMessage('modelLoadError', { path: modelPath, error: error.message });
                 }
             }
@@ -412,7 +394,7 @@
                     }
                 }
                 
-                document.getElementById('expression-info').textContent = `表情: ${expression}`;
+                document.getElementById('expression-info').textContent = `Expression: ${expression}`;
                 this.sendMessage('expressionChanged', { expression: expression });
             }
             
@@ -420,8 +402,8 @@
                 this.currentMotion = motion;
 
                 if (!this.model || !this.model.internalModel || !this.model.internalModel.coreModel) {
-                    document.getElementById('motion-info').textContent = `动作: 无模型`;
-                    this.sendMessage('motionPlayed', { motion, ok: false, reason: 'no_model' });
+                    document.getElementById('motion-info').textContent = `Motion: No available motions`;
+                    this.sendMessage('motionPlayed', { motion: requested, ok: false, groups });
                     return;
                 }
 
@@ -437,53 +419,20 @@
                         else if (taps.some(s => groups.includes(s))) group = taps.find(s => groups.includes(s));
                         else if (groups.length > 0) group = groups[0];
                         else {
-                            document.getElementById('motion-info').textContent = `动作: 无可用动作`;
+                            document.getElementById('motion-info').textContent = `Motion: No available motions`;
                             this.sendMessage('motionPlayed', { motion: requested, ok: false, groups });
                             return;
                         }
                     }
 
                     this.model.motion(group);
-                    document.getElementById('motion-info').textContent = `动作: ${group}`;
+                    document.getElementById('motion-info').textContent = `Motion: ${group}`;
                     this.sendMessage('motionPlayed', { motion: group, ok: true, groups });
                 } catch (error) {
-                    console.warn('播放动作失败:', error);
-                    document.getElementById('motion-info').textContent = `动作: 失败(${motion})`;
+                    console.warn('Failed to play motion:', error);
+                    document.getElementById('motion-info').textContent = `Motion: Failed(${motion})`;
                     this.sendMessage('motionPlayed', { motion, ok: false, error: error.message });
                 }
-            }
-            
-            setParameter(parameter, value) {
-                this.parameters[parameter] = value;
-                
-                if (this.model && this.model.internalModel && this.model.internalModel.coreModel) {
-                    // 真实Live2D模型
-                    try {
-                        const paramMap = {
-                            'eyeOpen': 'ParamEyeLOpen',
-                            'mouthOpen': 'ParamMouthOpenY',
-                            'angleX': 'ParamAngleX',
-                            'angleY': 'ParamAngleY',
-                            'angleZ': 'ParamAngleZ'
-                        };
-                        
-                        const paramId = paramMap[parameter];
-                        if (paramId) {
-                            this.model.internalModel.coreModel.setParameterValueById(paramId, value);
-                        }
-                    } catch (error) {
-                        console.warn('设置参数失败:', error);
-                    }
-                }
-                
-                // 更新UI显示
-                this.updateParameterDisplay();
-            }
-            
-            updateParameterDisplay() {
-                document.getElementById('eye-value').textContent = `${(this.parameters.eyeOpen * 100).toFixed(0)}%`;
-                document.getElementById('mouth-value').textContent = `${(this.parameters.mouthOpen * 100).toFixed(0)}%`;
-                document.getElementById('angle-value').textContent = `${this.parameters.angleZ.toFixed(1)}°`;
             }
             
             showError(message) {
@@ -505,17 +454,57 @@
                 return motions ? Object.keys(motions) : [];
             }
             
+            setCanvasOpacity(opacity) {
+                if (this.model) {
+                    this.model.alpha = Math.max(0, Math.min(1, opacity));
+                    this.sendMessage('canvasOpacityChanged', { opacity: this.model.alpha });
+                }
+            }
+            
+            setRotationAngle(angle) {
+                if (this.model) {
+                    // 将角度转换为弧度
+                    this.model.rotation = (angle * Math.PI) / 180;
+                    this.sendMessage('rotationAngleChanged', { angle: angle });
+                }
+            }
+            
+            setBackground(transparent, color) {
+                if (transparent) {
+                    // 设置透明背景
+                    this.background.clear();
+                    this.app.renderer.backgroundColor = 0x000000;
+                    this.app.renderer.backgroundAlpha = 0;
+                } else {
+                    // 设置彩色背景
+                    const colorValue = color ? parseInt(color.replace('#', ''), 16) : 0xffffff;
+                    this.background.clear();
+                    this.background.beginFill(colorValue, 1);
+                    this.background.drawRect(0, 0, this.app.renderer.width, this.app.renderer.height);
+                    this.background.endFill();
+                    this.app.renderer.backgroundColor = colorValue;
+                    this.app.renderer.backgroundAlpha = 1;
+                }
+                this.sendMessage('backgroundChanged', { transparent: transparent, color: color });
+            }
+            
             toggleInfoPanel(force) {
                 const infoEl = document.getElementById('info');
-                if (!infoEl) return;
+                const toggleBtn = document.getElementById('toggle-info');
+                
                 if (typeof force === 'boolean') {
                     this.infoVisible = force;
                 } else {
                     this.infoVisible = !this.infoVisible;
                 }
-                infoEl.style.display = this.infoVisible ? 'block' : 'none';
-                const btn = document.getElementById('toggle-info');
-                if (btn) btn.textContent = this.infoVisible ? '隐藏面板 [H]' : '显示面板 [H]';
+                
+                if (this.infoVisible) {
+                    infoEl.style.display = 'block';
+                    if (toggleBtn) toggleBtn.textContent = 'Hide Panel [H]';
+                } else {
+                    infoEl.style.display = 'none';
+                    if (toggleBtn) toggleBtn.textContent = 'Show Panel [H]';
+                }
             }
         }
         

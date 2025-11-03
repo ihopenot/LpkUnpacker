@@ -53,14 +53,14 @@ class WebLive2DWidget(QWidget):
         layout = QVBoxLayout(panel)
 
         # 文件选择区域
-        file_group = QGroupBox("模型选择")
+        file_group = QGroupBox("Model Selection")
         file_layout = QVBoxLayout(file_group)
 
-        self.select_folder_btn = QPushButton("选择模型文件夹")
+        self.select_folder_btn = QPushButton("Select Model Folder")
         self.select_folder_btn.clicked.connect(self.selectModelFolder)
         file_layout.addWidget(self.select_folder_btn)
 
-        self.model_path_label = QLabel("未选择模型")
+        self.model_path_label = QLabel("No model selected")
         self.model_path_label.setWordWrap(True)
         self.model_path_label.setStyleSheet("color: gray; font-size: 10px;")
         file_layout.addWidget(self.model_path_label)
@@ -68,7 +68,7 @@ class WebLive2DWidget(QWidget):
         layout.addWidget(file_group)
 
         # 表情控制区域
-        expression_group = QGroupBox("表情控制")
+        expression_group = QGroupBox("Expression Control")
         expression_layout = QVBoxLayout(expression_group)
 
         self.expression_combo = QComboBox()
@@ -78,7 +78,7 @@ class WebLive2DWidget(QWidget):
         layout.addWidget(expression_group)
 
         # 动作控制区域
-        motion_group = QGroupBox("动作控制")
+        motion_group = QGroupBox("Motion Control")
         motion_layout = QVBoxLayout(motion_group)
 
         self.motion_list = QListWidget()
@@ -87,38 +87,68 @@ class WebLive2DWidget(QWidget):
 
         layout.addWidget(motion_group)
 
-        # 参数控制区域
-        param_group = QGroupBox("参数调节")
-        param_layout = QVBoxLayout(param_group)
+        # 独立窗口控制区域
+        window_group = QGroupBox("Independent Window")
+        window_layout = QVBoxLayout(window_group)
 
-        eye_label = QLabel("眼部开合:")
-        self.eye_slider = QSlider(Qt.Horizontal)
-        self.eye_slider.setRange(0, 100)
-        self.eye_slider.setValue(100)
-        self.eye_slider.valueChanged.connect(self.onEyeChanged)
-        param_layout.addWidget(eye_label)
-        param_layout.addWidget(self.eye_slider)
+        self.open_window_btn = QPushButton("Open Independent Preview Window")
+        self.open_window_btn.clicked.connect(self.openIndependentWindow)
+        self.open_window_btn.setEnabled(False)  # 初始禁用，加载模型后启用
+        window_layout.addWidget(self.open_window_btn)
 
-        mouth_label = QLabel("嘴部开合:")
-        self.mouth_slider = QSlider(Qt.Horizontal)
-        self.mouth_slider.setRange(0, 100)
-        self.mouth_slider.setValue(0)
-        self.mouth_slider.valueChanged.connect(self.onMouthChanged)
-        param_layout.addWidget(mouth_label)
-        param_layout.addWidget(self.mouth_slider)
+        layout.addWidget(window_group)
 
-        angle_label = QLabel("头部角度:")
-        self.angle_slider = QSlider(Qt.Horizontal)
-        self.angle_slider.setRange(-30, 30)
-        self.angle_slider.setValue(0)
-        self.angle_slider.valueChanged.connect(self.onAngleChanged)
-        param_layout.addWidget(angle_label)
-        param_layout.addWidget(self.angle_slider)
+        # 画布设置区域
+        canvas_group = QGroupBox("Canvas Settings")
+        canvas_layout = QVBoxLayout(canvas_group)
 
-        layout.addWidget(param_group)
+        # 画布透明度
+        opacity_layout = QHBoxLayout()
+        opacity_layout.addWidget(QLabel("Opacity:"))
+        self.opacity_slider = QSlider(Qt.Horizontal)
+        self.opacity_slider.setRange(0, 100)
+        self.opacity_slider.setValue(100)
+        self.opacity_slider.valueChanged.connect(self.onOpacityChanged)
+        self.opacity_label = QLabel("100%")
+        self.opacity_label.setMinimumWidth(40)
+        opacity_layout.addWidget(self.opacity_slider)
+        opacity_layout.addWidget(self.opacity_label)
+        canvas_layout.addLayout(opacity_layout)
+
+        # 模型旋转
+        rotation_layout = QHBoxLayout()
+        rotation_layout.addWidget(QLabel("Rotation:"))
+        self.rotation_slider = QSlider(Qt.Horizontal)
+        self.rotation_slider.setRange(-180, 180)
+        self.rotation_slider.setValue(0)
+        self.rotation_slider.valueChanged.connect(self.onRotationChanged)
+        self.rotation_label = QLabel("0°")
+        self.rotation_label.setMinimumWidth(40)
+        rotation_layout.addWidget(self.rotation_slider)
+        rotation_layout.addWidget(self.rotation_label)
+        canvas_layout.addLayout(rotation_layout)
+
+        layout.addWidget(canvas_group)
+
+        # 背景设置区域
+        bg_group = QGroupBox("Background Settings")
+        bg_layout = QVBoxLayout(bg_group)
+
+        self.transparent_bg_btn = QPushButton("Transparent Background")
+        self.transparent_bg_btn.setCheckable(True)
+        self.transparent_bg_btn.setChecked(True)
+        self.transparent_bg_btn.clicked.connect(self.onBackgroundChanged)
+        bg_layout.addWidget(self.transparent_bg_btn)
+
+        self.colored_bg_btn = QPushButton("Colored Background")
+        self.colored_bg_btn.setCheckable(True)
+        self.colored_bg_btn.clicked.connect(self.onBackgroundChanged)
+        bg_layout.addWidget(self.colored_bg_btn)
+
+        layout.addWidget(bg_group)
 
         # 状态信息
-        status_group = QGroupBox("状态信息")
+        status_group = QGroupBox("Status Information")
         status_layout = QVBoxLayout(status_group)
 
         self.status_text = QTextEdit()
@@ -189,7 +219,7 @@ class WebLive2DWidget(QWidget):
     def selectModelFolder(self):
         """选择模型文件夹"""
         folder_path = QFileDialog.getExistingDirectory(
-            self, "选择Live2D模型文件夹",
+            self, "Select Live2D Model Folder",
             "D:/1awd/game/output" if os.path.exists("D:/1awd/game/output") else ""
         )
 
@@ -199,13 +229,13 @@ class WebLive2DWidget(QWidget):
     def loadModelFromFolder(self, folder_path):
         """从文件夹加载Live2D模型"""
         self.current_model_path = folder_path
-        self.model_path_label.setText(f"模型路径: {folder_path}")
+        self.model_path_label.setText(f"Model Path: {folder_path}")
 
         # 查找模型文件
         model_files = list(Path(folder_path).glob("*.json"))
         if not model_files:
-            self.statusChanged.emit("未找到模型文件")
-            self.addStatusMessage("错误: 未找到.json模型文件")
+            self.statusChanged.emit("Model file not found")
+            self.addStatusMessage("Error: No .json model file found")
             return
 
         model_file = model_files[0]
@@ -226,11 +256,14 @@ class WebLive2DWidget(QWidget):
             })
 
             self.modelLoaded.emit(str(model_file))
-            self.addStatusMessage(f"成功加载模型: {model_file.name}")
+            self.addStatusMessage(f"Successfully loaded model: {model_file.name}")
+            
+            # 启用独立窗口按钮
+            self.open_window_btn.setEnabled(True)
 
         except Exception as e:
             self.modelLoadFailed.emit(str(e))
-            self.addStatusMessage(f"加载模型失败: {str(e)}")
+            self.addStatusMessage(f"Failed to load model: {str(e)}")
 
     def updateControlsFromModel(self):
         """根据模型数据更新控制界面"""
@@ -239,7 +272,7 @@ class WebLive2DWidget(QWidget):
 
         # 表情
         self.expression_combo.clear()
-        self.expression_combo.addItem("默认")
+        self.expression_combo.addItem("Default")
         if 'FileReferences' in self.model_data and 'Expressions' in self.model_data['FileReferences']:
             expressions = self.model_data['FileReferences']['Expressions']
             if isinstance(expressions, list):
@@ -262,30 +295,44 @@ class WebLive2DWidget(QWidget):
 
     def onExpressionChanged(self, expression):
         """表情改变事件"""
-        if expression and expression != "默认":
+        if expression and expression != "Default":
             self.sendMessageToWeb('setExpression', {'expression': expression})
-            self.addStatusMessage(f"切换表情: {expression}")
+            self.addStatusMessage(f"Switch expression: {expression}")
 
     def onMotionClicked(self, item):
         """动作点击事件"""
         motion_file = item.data(Qt.UserRole)
         if motion_file:
             self.sendMessageToWeb('playMotion', {'motion': motion_file})
-            self.addStatusMessage(f"播放动作: {item.text()}")
+            self.addStatusMessage(f"Play motion: {item.text()}")
 
-    def onEyeChanged(self, value):
-        """眼部参数改变"""
-        eye_value = value / 100.0
-        self.sendMessageToWeb('setParameter', {'parameter': 'eyeOpen', 'value': eye_value})
-
-    def onMouthChanged(self, value):
-        """嘴部参数改变"""
-        mouth_value = value / 100.0
-        self.sendMessageToWeb('setParameter', {'parameter': 'mouthOpen', 'value': mouth_value})
-
-    def onAngleChanged(self, value):
-        """角度参数改变"""
-        self.sendMessageToWeb('setParameter', {'parameter': 'angleZ', 'value': value})
+    def openIndependentWindow(self):
+        """打开独立Live2D预览窗口"""
+        if not self.current_model_path:
+            self.addStatusMessage("Error: No model selected")
+            return
+            
+        # 查找模型文件
+        model_files = list(Path(self.current_model_path).glob("*.json"))
+        if not model_files:
+            self.addStatusMessage("Error: Model file not found")
+            return
+            
+        model_file = model_files[0]
+        
+        try:
+            # 导入Live2DPreviewWindow
+            from GUI.Live2DPreviewWindow import Live2DPreviewWindow
+            
+            # 创建并显示独立预览窗口
+            self.preview_window = Live2DPreviewWindow(str(model_file))
+            self.preview_window.show()
+            self.addStatusMessage(f"Opened independent preview window: {model_file.name}")
+            
+        except ImportError:
+            self.addStatusMessage("Error: Live2D independent preview feature unavailable")
+        except Exception as e:
+            self.addStatusMessage(f"Failed to open independent window: {str(e)}")
 
     def sendMessageToWeb(self, msg_type, data):
         """向Web视图发送消息"""
@@ -305,6 +352,34 @@ class WebLive2DWidget(QWidget):
         cursor = self.status_text.textCursor()
         cursor.movePosition(cursor.End)
         self.status_text.setTextCursor(cursor)
+
+    def onOpacityChanged(self, value):
+        """画布透明度改变事件"""
+        opacity = value / 100.0
+        self.opacity_label.setText(f"{value}%")
+        self.sendMessageToWeb('setCanvasOpacity', {'opacity': opacity})
+        self.addStatusMessage(f"Set canvas opacity: {value}%")
+
+    def onRotationChanged(self, value):
+        """模型旋转改变事件"""
+        self.rotation_label.setText(f"{value}°")
+        self.sendMessageToWeb('setRotationAngle', {'angle': value})
+        self.addStatusMessage(f"Set model rotation: {value}°")
+
+    def onBackgroundChanged(self):
+        """背景设置改变事件"""
+        sender = self.sender()
+        if sender == self.transparent_bg_btn:
+            if self.transparent_bg_btn.isChecked():
+                self.colored_bg_btn.setChecked(False)
+                self.sendMessageToWeb('setBackground', {'transparent': True})
+                self.addStatusMessage("Set transparent background")
+        elif sender == self.colored_bg_btn:
+            if self.colored_bg_btn.isChecked():
+                self.transparent_bg_btn.setChecked(False)
+                # 默认使用白色背景
+                self.sendMessageToWeb('setBackground', {'transparent': False, 'color': '#ffffff'})
+                self.addStatusMessage("Set colored background")
 
     def cleanup(self):
         """清理资源（当前为无操作，占位）"""
