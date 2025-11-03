@@ -5,8 +5,9 @@ from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QIcon
 
 # 确保设置正确的属性来支持高DPI缩放
-QCoreApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-QCoreApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
+QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
+QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
 
 def run_application():
     # 创建QApplication实例
