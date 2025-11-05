@@ -3,3 +3,5 @@ settings.json
 build/
 __pycache__/
 start.bat
+output/
+Resources/
