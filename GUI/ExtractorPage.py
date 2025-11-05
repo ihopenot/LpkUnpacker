@@ -9,6 +9,8 @@ from qfluentwidgets import (
     FluentIcon, InfoBar, InfoBarPosition, MessageBox
 )
 
+from Core.settings_manager import SettingsManager
+
 # Logger class for GUI output
 class QTextEditLogger(logging.Handler):
     def __init__(self, textEdit):
@@ -52,14 +54,18 @@ class ExtractorPage(QFrame):
         # Set object name - required for FluentWindow navigation
         self.setObjectName('extractorPage')
         
+        # Initialize settings manager
+        self.settings_manager = SettingsManager()
+        
         # Enable drop
         self.setAcceptDrops(True)
         
         # Default output directory
-        self.default_output_dir = os.path.join(os.getcwd(), "output")
+        self.default_output_dir = self.settings_manager.get("last_output_path", os.path.join(os.getcwd(), "output"))
         
         self.setupUI()
         self.configure_logging()
+        self.load_saved_paths()
         
         # 响应窗口大小变化
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -197,13 +203,20 @@ class ExtractorPage(QFrame):
         root_logger.addHandler(self.log_handler)
         
     def browse_lpk(self):
+        # Get last used directory
+        last_dir = os.path.dirname(self.settings_manager.get("last_lpk_path", ""))
+        if not last_dir or not os.path.exists(last_dir):
+            last_dir = os.getcwd()
+            
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select LPK File", "", "LPK Files (*.lpk)"
+            self, "Select LPK File", last_dir, "LPK Files (*.lpk)"
         )
         if file_path:
             # Use absolute path
             file_path = os.path.abspath(file_path)
             self.lpk_edit.setText(file_path)
+            self.settings_manager.set("last_lpk_path", file_path)
+            self.settings_manager.add_recent_file(file_path, "lpk")
             # Try to auto-locate config.json in the same directory
             dir_name = os.path.dirname(file_path)
             potential_config = os.path.join(dir_name, "config.json")
@@ -211,20 +224,38 @@ class ExtractorPage(QFrame):
                 self.config_edit.setText(potential_config)
                 
     def browse_config(self):
+        """Browse for config file"""
+        # Get last used directory
+        last_dir = os.path.dirname(self.settings_manager.get("last_config_path", ""))
+        if not last_dir or not os.path.exists(last_dir):
+            last_dir = os.getcwd()
+            
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select Config File", "", "JSON Files (*.json)"
+            self, 
+            "选择配置文件", 
+            last_dir,
+            "JSON Files (*.json);;All Files (*)"
         )
         if file_path:
-            # Use absolute path
-            self.config_edit.setText(os.path.abspath(file_path))
+            self.config_edit.setText(file_path)
+            self.settings_manager.set("last_config_path", file_path)
+            self.settings_manager.add_recent_file(file_path, "config")
             
     def browse_output(self):
+        """Browse for output directory"""
+        # Get last used directory
+        last_dir = self.settings_manager.get("last_output_path", self.default_output_dir)
+        if not os.path.exists(last_dir):
+            last_dir = os.getcwd()
+            
         dir_path = QFileDialog.getExistingDirectory(
-            self, "Select Output Directory"
+            self, 
+            "选择输出目录", 
+            last_dir
         )
         if dir_path:
-            # Use absolute path
-            self.output_edit.setText(os.path.abspath(dir_path))
+            self.output_edit.setText(dir_path)
+            self.settings_manager.set("last_output_path", dir_path)
             
     def normalize_path(self, path):
         """
@@ -250,6 +281,9 @@ class ExtractorPage(QFrame):
         return path
         
     def start_extraction(self):
+        # Save current paths before extraction
+        self.save_current_paths()
+        
         # Validate inputs
         lpk_path = self.lpk_edit.text()
         config_path = self.config_edit.text()
@@ -390,6 +424,39 @@ class ExtractorPage(QFrame):
             
         # 日志窗口自适应
         self.log_text.setMinimumHeight(int(200 * scale_factor))
+    
+    def load_saved_paths(self):
+        """Load previously saved paths"""
+        # Load last used paths
+        last_lpk = self.settings_manager.get("last_lpk_path", "")
+        last_config = self.settings_manager.get("last_config_path", "")
+        last_output = self.settings_manager.get("last_output_path", self.default_output_dir)
+        
+        if last_lpk and os.path.exists(last_lpk):
+            self.lpk_edit.setText(last_lpk)
+            
+        if last_config and os.path.exists(last_config):
+            self.config_edit.setText(last_config)
+            
+        if last_output:
+            self.output_edit.setText(last_output)
+    
+    def save_current_paths(self):
+        """Save current paths to settings"""
+        lpk_path = self.lpk_edit.text().strip()
+        config_path = self.config_edit.text().strip()
+        output_path = self.output_edit.text().strip()
+        
+        if lpk_path:
+            self.settings_manager.set("last_lpk_path", lpk_path)
+            self.settings_manager.add_recent_file(lpk_path, "lpk")
+            
+        if config_path:
+            self.settings_manager.set("last_config_path", config_path)
+            self.settings_manager.add_recent_file(config_path, "config")
+            
+        if output_path:
+            self.settings_manager.set("last_output_path", output_path)
         
         # 进度条高度
         self.progress_bar.setMinimumHeight(int(20 * scale_factor))

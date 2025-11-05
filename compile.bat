@@ -49,7 +49,8 @@ python -m nuitka --onefile ^
     --output-dir=build ^
     --windows-console-mode=disable ^
     --include-data-dir=./Img=Img ^
-    --include-package=qfluentwidgets,filetype,live2d,numpy ^
+    --include-package=qfluentwidgets ^
+    --include-package=filetype ^
     --windows-icon-from-ico=Img/icon.ico ^
     --nofollow-import-to=matplotlib,scipy,pandas,tkinter ^
     --python-flag=no_site ^
