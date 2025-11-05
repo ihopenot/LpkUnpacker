@@ -161,6 +161,8 @@
                 this.modelData = null;
                 this.currentExpression = null;
                 this.currentMotion = null;
+                this.canvasWidth = 800;  // 实际的CSS像素宽度
+                this.canvasHeight = 600; // 实际的CSS像素高度
                 this.init();
             }
             
@@ -194,8 +196,8 @@
                         height: Math.max(300, Math.floor(containerHeight)),
                         backgroundColor: 0x1099bb,
                         backgroundAlpha: 0.1,
-                        resolution: 1,  // 使用固定 resolution 避免高 DPI 问题
-                        autoDensity: false  // 禁用 autoDensity，手动处理高 DPI
+                        resolution: window.devicePixelRatio || 1,
+                        autoDensity: true 
                     });
                     
                     // 设置舞台
@@ -268,8 +270,7 @@
                 
                 const text = new PIXI.Text('Please select Live2D model folder', style);
                 text.anchor.set(0.5);
-                text.x = this.app.renderer.width / 2;
-                text.y = this.app.renderer.height / 2;
+                // 位置稍后在updateCanvasSize中设置，此时renderer可能还未完全初始化
                 this.app.stage.addChild(text);
                 this.placeholderText = text;
             }
@@ -277,7 +278,7 @@
             drawBackground() {
                 this.background.clear();
                 this.background.beginFill(0x667eea, 0.1);
-                this.background.drawRect(0, 0, this.app.renderer.width, this.app.renderer.height);
+                this.background.drawRect(0, 0, this.canvasWidth, this.canvasHeight);
                 this.background.endFill();
             }
 
@@ -300,6 +301,10 @@
                     targetW = Math.floor(Math.max(400, Math.min(targetW, window.innerWidth * 0.95)));
                     targetH = Math.floor(Math.max(300, Math.min(targetH, window.innerHeight * 0.95)));
                     
+                    // 保存实际的CSS像素尺寸
+                    this.canvasWidth = targetW;
+                    this.canvasHeight = targetH;
+                    
                     console.log(`Updating canvas size to: ${targetW}x${targetH} (CSS pixels), DPR: ${window.devicePixelRatio}`);
                     
                     // 更新渲染器尺寸
@@ -312,10 +317,11 @@
                     // 重绘背景
                     this.drawBackground();
                     
-                    // 更新占位符位置（使用渲染器的逻辑尺寸）
+                    // 更新占位符位置（使用渲染器的逻辑尺寸，即resize传入的尺寸）
                     if (this.placeholderText) {
-                        this.placeholderText.x = this.app.renderer.width / 2;
-                        this.placeholderText.y = this.app.renderer.height / 2;
+                        this.placeholderText.x = targetW / 2;
+                        this.placeholderText.y = targetH / 2;
+                        console.log(`Placeholder text positioned at: ${this.placeholderText.x}, ${this.placeholderText.y}`);
                     }
                     
                     // 如果有模型，重新适配到视图中心
@@ -477,9 +483,9 @@
                     const alignX = options.alignX ?? 0.5;   // 0.0 左, 0.5 中, 1.0 右
                     const alignY = options.alignY ?? 0.5;   // 0.0 上, 0.5 中, 1.0 下
 
-                    // 使用渲染器的逻辑尺寸（不是物理像素）
-                    const stageW = this.app.renderer.width;
-                    const stageH = this.app.renderer.height;
+                    // 使用实际的CSS像素尺寸
+                    const stageW = this.canvasWidth;
+                    const stageH = this.canvasHeight;
                     const availW = Math.max(100, stageW - margin * 2);
                     const availH = Math.max(100, stageH - margin * 2);
 
@@ -655,7 +661,7 @@
                     const colorValue = color ? parseInt(color.replace('#', ''), 16) : 0xffffff;
                     this.background.clear();
                     this.background.beginFill(colorValue, 1);
-                    this.background.drawRect(0, 0, this.app.renderer.width, this.app.renderer.height);
+                    this.background.drawRect(0, 0, this.canvasWidth, this.canvasHeight);
                     this.background.endFill();
                     this.app.renderer.backgroundColor = colorValue;
                     this.app.renderer.backgroundAlpha = 1;
@@ -675,6 +681,10 @@
                         const canvas = this.app.view;
                         const targetWidth = Math.max(100, width || 800);
                         const targetHeight = Math.max(100, height || 600);
+                        
+                        // 保存实际的CSS像素尺寸
+                        this.canvasWidth = targetWidth;
+                        this.canvasHeight = targetHeight;
                         
                         // 更新渲染器尺寸
                         this.app.renderer.resize(targetWidth, targetHeight);
@@ -747,8 +757,8 @@
                         align: 'center'
                     });
                     this.placeholderText.anchor.set(0.5);
-                    this.placeholderText.x = this.app.renderer.width / 2;
-                    this.placeholderText.y = this.app.renderer.height / 2;
+                    this.placeholderText.x = this.canvasWidth / 2;
+                    this.placeholderText.y = this.canvasHeight / 2;
                     this.app.stage.addChild(this.placeholderText);
                 }
             }
