@@ -49,10 +49,17 @@ python -m nuitka --onefile ^
     --output-dir=build ^
     --windows-console-mode=disable ^
     --include-data-dir=./Img=Img ^
+    --include-data-dir=./GUI/assets=GUI/assets ^
     --include-package=qfluentwidgets ^
     --include-package=filetype ^
+    --include-package=live2d ^
+    --include-package=numpy ^
+    --include-package=OpenGL ^
+    --include-package=PyQt5.QtWebEngineWidgets ^
+    --include-package=PyQt5.QtWebEngine ^
+    --include-package=PyQt5.QtWebEngineCore ^
     --windows-icon-from-ico=Img/icon.ico ^
-    --nofollow-import-to=matplotlib,scipy,pandas,tkinter ^
+    --nofollow-import-to=matplotlib,scipy,pandas,tkinter,test ^
     --python-flag=no_site ^
     --python-flag=no_docstrings ^
     --remove-output ^

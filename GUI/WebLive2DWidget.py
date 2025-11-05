@@ -3,48 +3,90 @@ import sys
 import json
 from pathlib import Path
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog,
-    QListWidget, QListWidgetItem, QGroupBox, QSlider, QComboBox, QTextEdit, QSplitter
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFileDialog,
+    QListWidget, QListWidgetItem, QGroupBox, QSplitter
 )
 from PyQt5.QtCore import Qt, QUrl, pyqtSignal, QTimer
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
 from PyQt5.QtGui import QFont
+from qfluentwidgets import (
+    PushButton, ComboBox, TextEdit, Slider, BodyLabel, SubtitleLabel, CardWidget, LineEdit
+)
 
 
-def _is_live2d_model_json(file_path: str) -> bool:
-    """验证是否为有效的Live2D模型JSON文件"""
+def _detect_model_type(file_path: str) -> str:
+    """检测模型类型并返回类型名称
+    
+    Returns:
+        "live2d_v3": Live2D Cubism 3.0+ (使用 .moc3 文件)
+        "live2d_v2": Live2D Cubism 2.1 (使用 .moc 文件)
+        "live2d_v1": Live2D v1.x (老版本，使用 .moc 文件)
+        "honkai_spine": 崩坏系列游戏格式 (Spine-like)
+        "unknown": 未知格式
+    """
     try:
-        # 检查文件名是否包含model
         file_name = os.path.basename(file_path).lower()
-        if 'model' not in file_name or not file_name.endswith('.json'):
-            return False
+        if not file_name.endswith('.json'):
+            return "unknown"
             
-        # 检查JSON内容
         with open(file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
             
         if not isinstance(data, dict):
-            return False
-            
-        # 检查Live2D v3模型的必要字段
-        file_refs = data.get('FileReferences', {})
-        if not isinstance(file_refs, dict):
-            return False
-            
-        # 检查是否有Moc文件引用
-        moc = file_refs.get('Moc')
-        if isinstance(moc, str) and moc.lower().endswith('.moc3'):
-            return True
-            
-        # 检查版本号
-        version = data.get('Version')
-        if isinstance(version, int) and version >= 3:
-            return True
-            
-        return False
+            return "unknown"
         
-    except Exception:
-        return False
+        # 检查是否为崩坏系列游戏格式（Spine-like）
+        if 'skeleton' in data and 'atlases' in data:
+            return "honkai_spine"
+        
+        # 检查 Live2D Cubism 3.0+ 模型 (使用 .moc3)
+        file_refs = data.get('FileReferences', {})
+        if isinstance(file_refs, dict):
+            moc = file_refs.get('Moc', '')
+            if isinstance(moc, str):
+                if moc.lower().endswith('.moc3'):
+                    return "live2d_v3"
+                elif moc.lower().endswith('.moc'):
+                    # Cubism 3.0+ 的老版本可能也用 .moc，通过 Version 字段区分
+                    version = data.get('Version', 0)
+                    if version >= 3:
+                        return "live2d_v3"
+                    else:
+                        return "live2d_v2"
+        
+        # 检查 Live2D Cubism 2.1 模型 (使用 .moc)
+        # v2 的特征：有 model 字段指向 .moc 文件
+        model_file = data.get('model', '')
+        if isinstance(model_file, str) and model_file.lower().endswith('.moc'):
+            return "live2d_v2"
+        
+        # 检查是否有 textures 或 motions 字段 (Live2D 的通用特征)
+        if 'textures' in data or 'motions' in data:
+            # 尝试通过其他字段判断版本
+            if 'model' in data:
+                return "live2d_v2"  # 老版本格式
+            elif 'FileReferences' in data:
+                return "live2d_v3"  # 新版本格式
+            else:
+                return "live2d_v1"  # 可能是 v1 版本
+            
+        return "unknown"
+        
+    except Exception as e:
+        print(f"Error detecting model type: {e}")
+        return "unknown"
+
+
+def _is_live2d_model_json(file_path: str) -> bool:
+    """验证是否为有效的Live2D模型JSON文件
+    
+    支持的版本：
+    - Live2D Cubism 3.0+ (v3, v4)
+    - Live2D Cubism 2.1 (v2)
+    - Live2D v1.x (有限支持，取决于运行时库)
+    """
+    model_type = _detect_model_type(file_path)
+    return model_type in ["live2d_v1", "live2d_v2", "live2d_v3"]
 
 
 def _find_valid_model_json(folder_path: str) -> str:
@@ -110,19 +152,18 @@ class WebLive2DWidget(QWidget):
         file_group = QGroupBox("Model Selection")
         file_layout = QVBoxLayout(file_group)
 
-        self.select_folder_btn = QPushButton("Select Model Folder")
+        self.select_folder_btn = PushButton("Select Model Folder")
         self.select_folder_btn.clicked.connect(self.selectModelFolder)
         file_layout.addWidget(self.select_folder_btn)
         
         # 清理模型按钮
-        self.clear_btn = QPushButton("Clear Model")
+        self.clear_btn = PushButton("Clear Model")
         self.clear_btn.clicked.connect(self.clearCurrentModel)
         self.clear_btn.setEnabled(False)  # 初始时禁用
         file_layout.addWidget(self.clear_btn)
 
-        self.model_path_label = QLabel("No model selected")
+        self.model_path_label = BodyLabel("No model selected")
         self.model_path_label.setWordWrap(True)
-        self.model_path_label.setStyleSheet("color: gray; font-size: 10px;")
         file_layout.addWidget(self.model_path_label)
 
         layout.addWidget(file_group)
@@ -131,7 +172,7 @@ class WebLive2DWidget(QWidget):
         expression_group = QGroupBox("Expression Control")
         expression_layout = QVBoxLayout(expression_group)
 
-        self.expression_combo = QComboBox()
+        self.expression_combo = ComboBox()
         self.expression_combo.currentTextChanged.connect(self.onExpressionChanged)
         expression_layout.addWidget(self.expression_combo)
 
@@ -153,12 +194,12 @@ class WebLive2DWidget(QWidget):
 
         # 画布透明度
         opacity_layout = QHBoxLayout()
-        opacity_layout.addWidget(QLabel("Opacity:"))
-        self.opacity_slider = QSlider(Qt.Horizontal)
+        opacity_layout.addWidget(BodyLabel("Opacity:"))
+        self.opacity_slider = Slider(Qt.Horizontal)
         self.opacity_slider.setRange(0, 100)
         self.opacity_slider.setValue(100)
         self.opacity_slider.valueChanged.connect(self.onOpacityChanged)
-        self.opacity_label = QLabel("100%")
+        self.opacity_label = BodyLabel("100%")
         self.opacity_label.setMinimumWidth(40)
         opacity_layout.addWidget(self.opacity_slider)
         opacity_layout.addWidget(self.opacity_label)
@@ -166,12 +207,12 @@ class WebLive2DWidget(QWidget):
 
         # 模型旋转
         rotation_layout = QHBoxLayout()
-        rotation_layout.addWidget(QLabel("Rotation:"))
-        self.rotation_slider = QSlider(Qt.Horizontal)
+        rotation_layout.addWidget(BodyLabel("Rotation:"))
+        self.rotation_slider = Slider(Qt.Horizontal)
         self.rotation_slider.setRange(-180, 180)
         self.rotation_slider.setValue(0)
         self.rotation_slider.valueChanged.connect(self.onRotationChanged)
-        self.rotation_label = QLabel("0°")
+        self.rotation_label = BodyLabel("0°")
         self.rotation_label.setMinimumWidth(40)
         rotation_layout.addWidget(self.rotation_slider)
         rotation_layout.addWidget(self.rotation_label)
@@ -179,15 +220,17 @@ class WebLive2DWidget(QWidget):
 
         # 分辨率控制
         resolution_layout = QVBoxLayout()
-        resolution_layout.addWidget(QLabel("Resolution:"))
+        resolution_layout.addWidget(BodyLabel("Resolution:"))
         
-        self.resolution_combo = QComboBox()
+        self.resolution_combo = ComboBox()
         self.resolution_combo.addItems([
             "Auto (Fit Container)",
             "800x600", 
             "1024x768",
             "1280x720", 
             "1920x1080",
+            "2560x1440",
+            "3840x2160",
             "Custom"
         ])
         self.resolution_combo.currentTextChanged.connect(self.onResolutionChanged)
@@ -195,22 +238,22 @@ class WebLive2DWidget(QWidget):
         
         # 自定义分辨率输入
         custom_layout = QHBoxLayout()
-        self.width_input = QComboBox()
-        self.width_input.setEditable(True)
-        self.width_input.addItems(["400", "800", "1024", "1280", "1920"])
-        self.width_input.setCurrentText("800")
+        self.width_input = LineEdit()
+        self.width_input.setPlaceholderText("Width")
+        self.width_input.setText("800")
+        self.width_input.setFixedWidth(80)
         
-        self.height_input = QComboBox()  
-        self.height_input.setEditable(True)
-        self.height_input.addItems(["300", "600", "768", "720", "1080"])
-        self.height_input.setCurrentText("600")
+        self.height_input = LineEdit()
+        self.height_input.setPlaceholderText("Height")
+        self.height_input.setText("600")
+        self.height_input.setFixedWidth(80)
         
-        apply_btn = QPushButton("Apply")
+        apply_btn = PushButton("Apply")
         apply_btn.clicked.connect(self.applyCustomResolution)
         
-        custom_layout.addWidget(QLabel("W:"))
+        custom_layout.addWidget(BodyLabel("W:"))
         custom_layout.addWidget(self.width_input)
-        custom_layout.addWidget(QLabel("H:"))
+        custom_layout.addWidget(BodyLabel("H:"))
         custom_layout.addWidget(self.height_input)
         custom_layout.addWidget(apply_btn)
         
@@ -223,13 +266,13 @@ class WebLive2DWidget(QWidget):
         bg_group = QGroupBox("Background Settings")
         bg_layout = QVBoxLayout(bg_group)
 
-        self.transparent_bg_btn = QPushButton("Transparent Background")
+        self.transparent_bg_btn = PushButton("Transparent Background")
         self.transparent_bg_btn.setCheckable(True)
         self.transparent_bg_btn.setChecked(True)
         self.transparent_bg_btn.clicked.connect(self.onBackgroundChanged)
         bg_layout.addWidget(self.transparent_bg_btn)
 
-        self.colored_bg_btn = QPushButton("Colored Background")
+        self.colored_bg_btn = PushButton("Colored Background")
         self.colored_bg_btn.setCheckable(True)
         self.colored_bg_btn.clicked.connect(self.onBackgroundChanged)
         bg_layout.addWidget(self.colored_bg_btn)
@@ -240,10 +283,9 @@ class WebLive2DWidget(QWidget):
         status_group = QGroupBox("Status Information")
         status_layout = QVBoxLayout(status_group)
 
-        self.status_text = QTextEdit()
+        self.status_text = TextEdit()
         self.status_text.setMaximumHeight(100)
         self.status_text.setReadOnly(True)
-        self.status_text.setFont(QFont("Consolas", 8))
         status_layout.addWidget(self.status_text)
 
         layout.addWidget(status_group)
@@ -324,11 +366,54 @@ class WebLive2DWidget(QWidget):
         model_file_path = _find_valid_model_json(folder_path)
         
         if not model_file_path:
-            # 没有找到有效的模型文件
+            # 没有找到有效的模型文件，检查是否是其他格式
+            folder = Path(folder_path)
+            all_json_files = list(folder.glob("*.json"))
+            
+            # 检测其他格式
+            detected_types = {}
+            for json_file in all_json_files:
+                model_type = _detect_model_type(str(json_file))
+                if model_type != "unknown":
+                    detected_types[str(json_file)] = model_type
+                
+                if model_type == "honkai_spine":
+                    error_msg = "Detected Honkai/Spine format model (not Live2D Cubism)"
+                    self.statusChanged.emit(error_msg)
+                    self.addStatusMessage(f"⚠️ {error_msg}")
+                    self.addStatusMessage(f"Found: {json_file.name}")
+                    self.addStatusMessage("This format is NOT supported by Live2D preview.")
+                    self.addStatusMessage("")
+                    self.addStatusMessage("📌 Supported formats:")
+                    self.addStatusMessage("  • Live2D Cubism v3/v4 (.moc3 files)")
+                    self.addStatusMessage("  • Live2D Cubism v2 (.moc files)")
+                    self.addStatusMessage("  • Live2D v1.x (limited support)")
+                    self.addStatusMessage("")
+                    self.addStatusMessage("💡 Tip: This appears to be a Honkai series game model")
+                    self.addStatusMessage("   which uses Spine or similar animation system.")
+                    self.clearCurrentModel()
+                    return
+            
+            # 没有找到任何可识别的模型文件
             error_msg = "No valid Live2D model file found in the selected folder"
             self.statusChanged.emit(error_msg)
-            self.addStatusMessage(f"Error: {error_msg}")
-            self.addStatusMessage("Please ensure the folder contains a valid *model*.json file")
+            self.addStatusMessage(f"❌ Error: {error_msg}")
+            self.addStatusMessage("")
+            self.addStatusMessage("📌 Supported Live2D formats:")
+            self.addStatusMessage("  • Live2D Cubism v3/v4: *model*.json + .moc3 file")
+            self.addStatusMessage("  • Live2D Cubism v2: *model*.json + .moc file")
+            self.addStatusMessage("  • Live2D v1.x: *model*.json (legacy)")
+            self.addStatusMessage("")
+            if detected_types:
+                self.addStatusMessage("🔍 Detected files in folder:")
+                for file_path, ftype in detected_types.items():
+                    fname = Path(file_path).name
+                    self.addStatusMessage(f"  • {fname}: {ftype}")
+            else:
+                self.addStatusMessage("💡 Tip: Make sure the model folder contains:")
+                self.addStatusMessage("  - A JSON file with 'model' in its name")
+                self.addStatusMessage("  - The corresponding .moc or .moc3 file")
+                self.addStatusMessage("  - Texture files (.png)")
             
             # 清理当前状态，但不重置整个界面
             self.clearCurrentModel()
@@ -550,8 +635,8 @@ class WebLive2DWidget(QWidget):
     def applyCustomResolution(self):
         """应用自定义分辨率"""
         try:
-            width = int(self.width_input.currentText())
-            height = int(self.height_input.currentText())
+            width = int(self.width_input.text())
+            height = int(self.height_input.text())
             
             if width < 100 or height < 100:
                 self.addStatusMessage("Resolution too small (minimum 100x100)")

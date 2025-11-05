@@ -1,6 +1,6 @@
 import os
 from PyQt5.QtWidgets import (QFrame, QVBoxLayout, QHBoxLayout, QLabel, QApplication, 
-                             QSizePolicy, QPushButton, QFileDialog, QSplitter, QGroupBox, QButtonGroup)
+                             QSizePolicy, QFileDialog, QSplitter, QGroupBox, QButtonGroup)
 from PyQt5.QtCore import Qt, QCoreApplication, pyqtSignal
 from PyQt5.QtGui import QFont
 from qfluentwidgets import SubtitleLabel, PushButton, InfoBar, InfoBarPosition, RadioButton

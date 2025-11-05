@@ -173,18 +173,29 @@
                     
                     // 获取canvas元素并计算初始尺寸
                     const canvas = document.getElementById('canvas');
-                    const containerWidth = canvas.clientWidth || window.innerWidth * 0.9;
-                    const containerHeight = canvas.clientHeight || window.innerHeight * 0.85;
+                    // 修复高 DPI 显示器上的尺寸问题
+                    // 使用 clientWidth/Height 而不是直接使用窗口尺寸
+                    let containerWidth = canvas.clientWidth || canvas.offsetWidth || 800;
+                    let containerHeight = canvas.clientHeight || canvas.offsetHeight || 600;
+                    
+                    // 如果 canvas 还没有被渲染，使用窗口尺寸作为后备
+                    if (containerWidth === 0 || containerHeight === 0) {
+                        containerWidth = window.innerWidth * 0.9;
+                        containerHeight = window.innerHeight * 0.85;
+                    }
+                    
+                    console.log(`Initial container size: ${containerWidth}x${containerHeight}, DPR: ${window.devicePixelRatio}`);
                     
                     // 初始化PIXI应用，使用动态尺寸
+                    // 在高 DPI 显示器上，使用固定 resolution=1 来避免定位问题
                     this.app = new PIXI.Application({
                         view: canvas,
-                        width: Math.max(400, containerWidth),
-                        height: Math.max(300, containerHeight),
+                        width: Math.max(400, Math.floor(containerWidth)),
+                        height: Math.max(300, Math.floor(containerHeight)),
                         backgroundColor: 0x1099bb,
                         backgroundAlpha: 0.1,
-                        resolution: window.devicePixelRatio || 1,
-                        autoDensity: true
+                        resolution: 1,  // 使用固定 resolution 避免高 DPI 问题
+                        autoDensity: false  // 禁用 autoDensity，手动处理高 DPI
                     });
                     
                     // 设置舞台
@@ -274,32 +285,43 @@
                 try {
                     const canvas = this.app.view;
                     
-                    // 获取容器尺寸
-                    let targetW = canvas.clientWidth || canvas.parentElement?.clientWidth || window.innerWidth * 0.9;
-                    let targetH = canvas.clientHeight || canvas.parentElement?.clientHeight || window.innerHeight * 0.85;
+                    // 获取容器的实际可见尺寸（CSS 像素）
+                    let targetW = canvas.clientWidth || canvas.offsetWidth;
+                    let targetH = canvas.clientHeight || canvas.offsetHeight;
                     
-                    // 确保尺寸合理
-                    targetW = Math.max(400, Math.min(targetW, window.innerWidth));
-                    targetH = Math.max(300, Math.min(targetH, window.innerHeight));
+                    // 如果容器尺寸无效，使用父元素或窗口尺寸
+                    if (!targetW || !targetH) {
+                        const parent = canvas.parentElement;
+                        targetW = parent ? parent.clientWidth : window.innerWidth * 0.9;
+                        targetH = parent ? parent.clientHeight : window.innerHeight * 0.85;
+                    }
                     
-                    console.log(`Updating canvas size to: ${targetW}x${targetH}`);
+                    // 确保尺寸合理（使用整数避免模糊）
+                    targetW = Math.floor(Math.max(400, Math.min(targetW, window.innerWidth * 0.95)));
+                    targetH = Math.floor(Math.max(300, Math.min(targetH, window.innerHeight * 0.95)));
+                    
+                    console.log(`Updating canvas size to: ${targetW}x${targetH} (CSS pixels), DPR: ${window.devicePixelRatio}`);
                     
                     // 更新渲染器尺寸
                     this.app.renderer.resize(targetW, targetH);
                     
+                    // 更新 canvas 的 CSS 尺寸以匹配
+                    canvas.style.width = targetW + 'px';
+                    canvas.style.height = targetH + 'px';
+                    
                     // 重绘背景
                     this.drawBackground();
                     
-                    // 更新占位符位置
+                    // 更新占位符位置（使用渲染器的逻辑尺寸）
                     if (this.placeholderText) {
                         this.placeholderText.x = this.app.renderer.width / 2;
                         this.placeholderText.y = this.app.renderer.height / 2;
                     }
                     
-                    // 如果有模型，重新适配
+                    // 如果有模型，重新适配到视图中心
                     if (this.model) {
                         setTimeout(() => {
-                            this.fitModelToView({ mode: 'contain', margin: 20, alignX: 0.5, alignY: 0.5 });
+                            this.fitModelToView({ mode: 'contain', margin: 50, alignX: 0.5, alignY: 0.5 });
                         }, 10);
                     }
                     
@@ -378,15 +400,15 @@
                         // 等待一帧后进行初始化，确保模型完全加载
                         await new Promise(resolve => requestAnimationFrame(resolve));
                         
-                        // 设置模型自适应位置与缩放
-                        this.fitModelToView({ mode: 'contain', margin: 20, alignX: 0.5, alignY: 0.5 });
-                        
-                        // 强制渲染一次
-                        this.app.renderer.render(this.app.stage);
-                        
                         // 确保模型可见
                         this.model.visible = true;
                         this.model.alpha = 1.0;
+                        
+                        // 设置模型自适应位置与缩放（使用更大的边距）
+                        this.fitModelToView({ mode: 'contain', margin: 50, alignX: 0.5, alignY: 0.5 });
+                        
+                        // 强制渲染一次
+                        this.app.renderer.render(this.app.stage);
                         
                         // 启用交互
                         this.model.interactive = true;
@@ -422,11 +444,16 @@
                     const name = (modelPath || '').split(/[\\\/]/).pop();
                     document.getElementById('model-info').textContent = `Model: ${name || 'Unknown'}`;
                     
-                    // 延迟重新适配，确保模型完全初始化
+                    // 延迟重新适配，确保模型完全初始化（使用更大的边距）
                     setTimeout(() => {
-                        this.fitModelToView({ mode: 'contain', margin: 20, alignX: 0.5, alignY: 0.5 });
+                        this.fitModelToView({ mode: 'contain', margin: 50, alignX: 0.5, alignY: 0.5 });
                         this.app.renderer.render(this.app.stage);
                     }, 100);
+                    
+                    // 再次延迟适配，确保在高 DPI 显示器上也能正确居中
+                    setTimeout(() => {
+                        this.fitModelToView({ mode: 'contain', margin: 50, alignX: 0.5, alignY: 0.5 });
+                    }, 300);
                     
                     this.sendMessage('modelLoaded', { path: modelPath });
                     
@@ -446,41 +473,48 @@
 
                 try {
                     const mode = options.mode || 'contain'; // 'contain' 或 'cover'
-                    const margin = options.margin ?? 20;
+                    const margin = options.margin ?? 50;  // 增加边距避免模型贴边
                     const alignX = options.alignX ?? 0.5;   // 0.0 左, 0.5 中, 1.0 右
                     const alignY = options.alignY ?? 0.5;   // 0.0 上, 0.5 中, 1.0 下
 
+                    // 使用渲染器的逻辑尺寸（不是物理像素）
                     const stageW = this.app.renderer.width;
                     const stageH = this.app.renderer.height;
-                    const availW = Math.max(1, stageW - margin * 2);
-                    const availH = Math.max(1, stageH - margin * 2);
+                    const availW = Math.max(100, stageW - margin * 2);
+                    const availH = Math.max(100, stageH - margin * 2);
+
+                    console.log(`Stage size: ${stageW}x${stageH}, Available: ${availW}x${availH}`);
 
                     // 获取模型本地边界（不受父级缩放影响）
                     const localBounds = this.model.getLocalBounds();
                     const w0 = Math.max(1, localBounds.width);
                     const h0 = Math.max(1, localBounds.height);
+                    
+                    console.log(`Model bounds: ${w0}x${h0}, position: (${localBounds.x}, ${localBounds.y})`);
 
-                    // 计算缩放比例，确保模型可见
+                    // 计算缩放比例，确保模型完全可见
                     let scale = mode === 'cover'
                         ? Math.max(availW / w0, availH / h0)
                         : Math.min(availW / w0, availH / h0);
                     
-                    // 确保缩放比例合理
-                    scale = Math.max(0.1, Math.min(scale, 10));
+                    // 确保缩放比例合理且偏保守（宁可小一点也要确保居中）
+                    scale = Math.max(0.1, Math.min(scale * 0.9, 5));  // 乘以 0.9 留出更多空间
 
                     this.model.scale.set(scale);
                     
-                    // 将原点移到中心以便居中定位
+                    // 将锚点设置到模型边界的中心
                     this.model.pivot.set(localBounds.x + w0 / 2, localBounds.y + h0 / 2);
                     
-                    // 根据对齐参数定位
-                    this.model.position.set(margin + availW * alignX, margin + availH * alignY);
+                    // 将模型定位到舞台中心（或根据对齐参数定位）
+                    const posX = margin + availW * alignX;
+                    const posY = margin + availH * alignY;
                     
-                    // 确保模型在舞台范围内
-                    this.model.position.x = Math.max(0, Math.min(this.model.position.x, stageW));
-                    this.model.position.y = Math.max(0, Math.min(this.model.position.y, stageH));
+                    this.model.position.set(posX, posY);
                     
-                    console.log(`Model fitted to view: scale=${scale.toFixed(2)}, position=(${this.model.position.x.toFixed(1)}, ${this.model.position.y.toFixed(1)})`);
+                    console.log(`Model fitted: scale=${scale.toFixed(3)}, pivot=(${this.model.pivot.x.toFixed(1)}, ${this.model.pivot.y.toFixed(1)}), position=(${posX.toFixed(1)}, ${posY.toFixed(1)})`);
+                    
+                    // 强制渲染一帧
+                    this.app.renderer.render(this.app.stage);
                     
                 } catch (error) {
                     console.warn('Error fitting model to view:', error);
