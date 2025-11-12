@@ -244,7 +244,27 @@
                     
                     // 通知Python预览器已准备就绪
                     this.sendMessage('ready', {});
-                    
+
+                    // 如果通过 URL 参数提供了模型信息，则自动加载
+                    try {
+                        const params = new URLSearchParams(window.location.search);
+                        const directUrl = params.get('modelUrl');
+                        const base = params.get('modelBase');
+                        const entry = params.get('modelJson');
+                        let autoUrl = null;
+                        if (directUrl) {
+                            autoUrl = directUrl;
+                        } else if (base && entry) {
+                            autoUrl = base.replace(/\/$/, '') + '/' + entry.replace(/^\//, '');
+                        }
+                        if (autoUrl) {
+                            console.log('Auto-loading model from URL params:', autoUrl);
+                            await this.loadModel(autoUrl, null);
+                        }
+                    } catch (e) {
+                        console.warn('Failed to parse URL params for auto model load:', e);
+                    }
+                
                 } catch (error) {
                     this.showError('Initialization failed: ' + error.message);
                 }

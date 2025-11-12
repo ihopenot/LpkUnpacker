@@ -7,8 +7,14 @@ from PyQt5.QtWidgets import (
     QListWidget, QListWidgetItem, QGroupBox, QSplitter
 )
 from PyQt5.QtCore import Qt, QUrl, pyqtSignal, QTimer
-from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
-from PyQt5.QtGui import QFont
+try:
+    from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
+    WEB_ENGINE_AVAILABLE = True
+except Exception:
+    QWebEngineView = None
+    QWebEngineSettings = None
+    WEB_ENGINE_AVAILABLE = False
+from PyQt5.QtGui import QFont, QDesktopServices
 from qfluentwidgets import (
     PushButton, ComboBox, TextEdit, Slider, BodyLabel, SubtitleLabel, CardWidget, LineEdit
 )
@@ -118,6 +124,8 @@ class WebLive2DWidget(QWidget):
         super().__init__(parent)
         self.current_model_path = None
         self.model_data = {}
+        self.proxy_port = None
+        self._mounted_base = None
         self.setupUI()
         self.setupWebContent()
 
@@ -290,6 +298,17 @@ class WebLive2DWidget(QWidget):
 
         layout.addWidget(status_group)
 
+        # 浏览器预览（仅开发环境）
+        if not getattr(sys, 'frozen', False):
+            preview_group = QGroupBox("Web Preview (Dev)")
+            preview_layout = QVBoxLayout(preview_group)
+
+            self.open_browser_btn = PushButton("Open Preview in Browser")
+            self.open_browser_btn.clicked.connect(self.openPreviewInBrowser)
+            preview_layout.addWidget(self.open_browser_btn)
+
+            layout.addWidget(preview_group)
+
         layout.addStretch()
         return panel
 
@@ -298,54 +317,111 @@ class WebLive2DWidget(QWidget):
         panel = QWidget()
         layout = QVBoxLayout(panel)
 
-        # Web视图
-        self.web_view = QWebEngineView()
-        # 允许本地HTML访问远程CDN与本地文件URL
-        try:
-            settings = self.web_view.settings()
-            settings.setAttribute(QWebEngineSettings.LocalContentCanAccessFileUrls, True)
-            settings.setAttribute(QWebEngineSettings.LocalContentCanAccessRemoteUrls, True)
-        except Exception as e:
-            print(f"Warn: failed to apply QWebEngineSettings - {e}")
-        self.web_view.setMinimumSize(400, 400)
-        layout.addWidget(self.web_view)
+        # Web视图（可选）
+        self.web_view = None
+        if WEB_ENGINE_AVAILABLE:
+            try:
+                self.web_view = QWebEngineView()
+                # 允许本地HTML访问远程CDN与本地文件URL
+                settings = self.web_view.settings()
+                settings.setAttribute(QWebEngineSettings.LocalContentCanAccessFileUrls, True)
+                settings.setAttribute(QWebEngineSettings.LocalContentCanAccessRemoteUrls, True)
+                self.web_view.setMinimumSize(400, 400)
+                layout.addWidget(self.web_view)
+            except Exception as e:
+                print(f"Warn: failed to init QWebEngineView - {e}")
+                self.web_view = None
+        else:
+            # 无 Web 引擎时，右侧仅显示占位提示，避免崩溃
+            placeholder = BodyLabel("Web preview is unavailable in this build.\nUse the 'Open Preview in Browser' button to view.")
+            placeholder.setWordWrap(True)
+            layout.addWidget(placeholder)
 
         return panel
 
     def setupWebContent(self):
-        """设置Web内容（加载静态HTML）"""
-        # 兼容打包后的资源路径
+        """设置Web内容（加载静态HTML或在打包环境下使用URL代理）"""
+        # 打包环境下自动使用FastAPI URL代理，避免直接加载本地文件
         if getattr(sys, 'frozen', False):
-            # 打包后的可执行文件 - Nuitka会将资源放在可执行文件同目录
-            base_path = Path(sys.executable).parent
-            # 尝试多个可能的路径
-            possible_paths = [
-                base_path / "GUI" / "assets" / "live2d" / "index.html",
-                base_path / "assets" / "live2d" / "index.html", 
-                Path(os.getcwd()) / "GUI" / "assets" / "live2d" / "index.html"
-            ]
-        else:
-            # 开发环境
-            base_path = Path(__file__).parent
-            possible_paths = [
-                base_path / "assets" / "live2d" / "index.html",
-                base_path.parent / "GUI" / "assets" / "live2d" / "index.html"
-            ]
-            
+            try:
+                from GUI.web_server import start_server
+                port = start_server(host='127.0.0.1', port=0)
+                self.proxy_port = port
+                proxy_url = f"http://127.0.0.1:{port}/static/live2d/index.html"
+                print(f"打包环境检测到，使用URL代理: {proxy_url}")
+                if self.web_view:
+                    self.web_view.setUrl(QUrl(proxy_url))
+                self.statusChanged.emit(f"Using URL proxy at {proxy_url}")
+                return
+            except Exception as e:
+                print(f"启动URL代理失败，回退到本地文件: {e}")
+                # 回退到本地文件加载
+
+        # 非打包环境或代理失败，按原逻辑加载本地文件
+        if not self.web_view:
+            # 无 Web 引擎，跳过嵌入式预览
+            self.statusChanged.emit("WebEngine not available, skipping embedded preview.")
+            return
+        base_path = Path(__file__).parent
+        possible_paths = [
+            base_path / "assets" / "live2d" / "index.html",
+            base_path.parent / "GUI" / "assets" / "live2d" / "index.html"
+        ]
+
         assets_path = None
         for path in possible_paths:
             if path.exists():
                 assets_path = path
                 break
-                
+
         if assets_path is None:
             err = f"缺少Web预览HTML文件，尝试过的路径: {[str(p) for p in possible_paths]}"
             print(err)
             self.statusChanged.emit(err)
             return
-            
+
         print(f"加载Live2D HTML文件: {assets_path}")
-        self.web_view.load(QUrl.fromLocalFile(str(assets_path.resolve())))
+        if self.web_view:
+            self.web_view.load(QUrl.fromLocalFile(str(assets_path.resolve())))
+
+    def openPreviewInBrowser(self):
+        """开发环境下：启动FastAPI代理并在系统浏览器打开预览页面"""
+        try:
+            from GUI.web_server import start_server
+        except Exception as e:
+            self.addStatusMessage("FastAPI/uvicorn not available. Please run: pip install fastapi uvicorn")
+            return
+
+        if not self.proxy_port:
+            try:
+                self.proxy_port = start_server(host='127.0.0.1', port=0)
+                self.addStatusMessage(f"Started web proxy on 127.0.0.1:{self.proxy_port}")
+            except Exception as e:
+                self.addStatusMessage(f"Failed to start web proxy: {e}")
+                return
+
+        # 如果已有选中的模型文件夹，挂载并通过 URL 参数传入
+        query = ""
+        if self.current_model_path:
+            try:
+                from GUI.web_server import mount_model_dir
+                base = mount_model_dir(self.current_model_path)
+                self._mounted_base = base
+                # 推断模型入口 JSON 文件
+                model_json = Path(self.model_data.get('path') or '').name if self.model_data else ''
+                if not model_json:
+                    # 在文件夹中寻找一个包含 'model' 的 json
+                    candidates = list(Path(self.current_model_path).glob("*model*.json"))
+                    if candidates:
+                        model_json = candidates[0].name
+                if model_json:
+                    query = f"?modelBase={base}&modelJson={model_json}"
+            except Exception as e:
+                self.addStatusMessage(f"Failed to mount model dir for browser preview: {e}")
+
+        url = f"http://127.0.0.1:{self.proxy_port}/static/live2d/index.html{query}"
+        QDesktopServices.openUrl(QUrl(url))
+        self.addStatusMessage(f"Opened browser preview: {url}")
 
     def selectModelFolder(self):
         """选择模型文件夹"""
@@ -444,13 +520,27 @@ class WebLive2DWidget(QWidget):
             # 更新控制界面
             self.updateControlsFromModel()
 
-            # 发送到Web视图
+            # 发送到Web视图（优先使用HTTP路径，如果代理可用）
+            http_model_url = None
+            if self.proxy_port:
+                try:
+                    from GUI.web_server import mount_model_dir
+                    base = mount_model_dir(self.current_model_path)
+                    self._mounted_base = base
+                    http_model_url = f"http://127.0.0.1:{self.proxy_port}{base}/{Path(model_file_path).name}"
+                except Exception as e:
+                    self.addStatusMessage(f"Failed to mount model dir: {e}")
+
             model_url = QUrl.fromLocalFile(model_file_path).toString()
-            self.sendMessageToWeb('loadModel', {
+            payload = {
                 'modelPath': model_file_path,
-                'modelUrl': model_url,
+                'modelUrl': http_model_url or model_url,
                 'modelData': self.model_data
-            })
+            }
+            if http_model_url:
+                payload['pathBase'] = self._mounted_base
+                payload['httpModelUrl'] = http_model_url
+            self.sendMessageToWeb('loadModel', payload)
 
             # 延迟发送画布更新消息，确保模型加载完成
             QTimer.singleShot(200, lambda: self.sendMessageToWeb('updateCanvas', {}))
@@ -569,6 +659,9 @@ class WebLive2DWidget(QWidget):
 
     def sendMessageToWeb(self, msg_type, data):
         """向Web视图发送消息"""
+        if not self.web_view:
+            # 在无 WebEngine 的构建中静默忽略，左侧面板仍可使用
+            return
         script = f"""
         if (window.live2dPreview) {{
             window.live2dPreview.handleMessage({{
