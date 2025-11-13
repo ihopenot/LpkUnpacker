@@ -44,6 +44,18 @@ except Exception as e:
             self.setObjectName('encryptionPage')
             QHBoxLayout(self).addWidget(QFrame(self))
 
+try:
+    from GUI.SteamWorkshopPage import SteamWorkshopPage
+except Exception as e:
+    import traceback
+    print(f"Error importing SteamWorkshopPage: {e}")
+    traceback.print_exc()
+    class SteamWorkshopPage(QFrame):
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.setObjectName('steamWorkshopPage')
+            QHBoxLayout(self).addWidget(QFrame(self))
+
 
 class MainWindow(FluentWindow):
     """ Main Window with Navigation """
@@ -72,25 +84,15 @@ class MainWindow(FluentWindow):
             print(f"Error creating EncryptionPage: {e}")
             self.encryptionPage = QFrame(self)
             self.encryptionPage.setObjectName('encryptionPage')
-
-        self.initWindow()
-        self.initNavigation()
-        
-        # Set theme
-        setTheme(Theme.AUTO)
-        
-        # 为整个应用设置字体
-        self.updateFontSize()
-        
-        # 安装事件过滤器以处理缩放
-        self.installEventFilter(self)
-        
-    def initWindow(self):
-        self.resize(1000, 700)  # 稍微增大初始窗口尺寸
-        self.setWindowTitle('LPK Unpacker GUI')
-        
-    def initNavigation(self):
-        # Add sub-interfaces to navigation
+            try:
+                self.steamWorkshopPage = SteamWorkshopPage(self)
+            except Exception as e:
+                print(f"Error creating SteamWorkshopPage: {e}")
+                self.steamWorkshopPage = QFrame(self)
+                self.steamWorkshopPage.setObjectName('steamWorkshopPage')
+        except Exception as e:
+            print(f"Error adding SteamWorkshopPage to navigation: {e}")
+            
         try:
             self.addSubInterface(self.extractorPage, FIF.ZIP_FOLDER, 'LPK Extractor')
         except Exception as e:
@@ -138,6 +140,6 @@ class MainWindow(FluentWindow):
         app.setFont(font)
         
         # 确保子页面知道字体已更新
-        for page in [self.extractorPage, self.previewPage, self.encryptionPage]:
+        for page in [self.extractorPage, self.previewPage, self.encryptionPage, self.steamWorkshopPage]:
             if hasattr(page, 'updateUIScale'):
                 page.updateUIScale(self.width(), self.height())
