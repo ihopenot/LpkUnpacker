@@ -110,6 +110,28 @@
             font-weight: bold;
             color: #ffd93d;
         }
+        /* 右侧控制面板样式 */
+        #control-panel {
+            position: absolute;
+            top: 60px;
+            right: 20px;
+            width: 320px;
+            max-height: 80vh;
+            overflow: auto;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            padding: 12px 14px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        .control-group { margin-bottom: 12px; }
+        .control-group label { display: block; font-size: 13px; margin-bottom: 6px; color: #ffd93d; }
+        .control-group input[type="range"] { width: 100%; }
+        .control-inline { display: flex; gap: 8px; align-items: center; }
+        #motion-list { list-style: none; margin: 0; padding: 0; }
+        #motion-list li { padding: 6px 8px; border-radius: 6px; cursor: pointer; background: rgba(255,255,255,0.08); margin-bottom: 6px; }
+        #motion-list li:hover { background: rgba(255,255,255,0.18); }
+        .status-log { background: rgba(0,0,0,0.4); border-radius: 6px; padding: 6px; max-height: 150px; overflow: auto; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -148,6 +170,67 @@
     </div>
     <div id="ui-controls">
         <button id="toggle-info" title="Shortcut: H or Double-click canvas">Hide Panel [H]</button>
+    </div>
+    <!-- 内嵌控制面板（替代软件左侧面板） -->
+    <div id="control-panel">
+        <div class="control-group">
+            <label>Expression</label>
+            <select id="expression-select">
+                <option value="">None</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label>Motion Groups</label>
+            <ul id="motion-list"></ul>
+        </div>
+        <div class="control-group">
+            <label>Opacity</label>
+            <div class="control-inline">
+                <input type="range" id="opacity-slider" min="0" max="100" value="100" />
+                <span id="opacity-label">100%</span>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>Rotation</label>
+            <div class="control-inline">
+                <input type="range" id="rotation-slider" min="-180" max="180" value="0" />
+                <span id="rotation-label">0°</span>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>Resolution</label>
+            <select id="resolution-select">
+                <option value="auto">Auto</option>
+                <option value="800x600">800 × 600</option>
+                <option value="1024x768">1024 × 768</option>
+                <option value="1280x720">1280 × 720</option>
+                <option value="1920x1080">1920 × 1080</option>
+                <option value="2560x1440">2560 × 1440</option>
+                <option value="3840x2160">3840 × 2160</option>
+                <option value="custom">Custom…</option>
+            </select>
+            <div id="custom-res" class="control-inline" style="margin-top:6px; display:none;">
+                <input type="number" id="width-input" min="100" value="800" style="width:90px;" />
+                <span>×</span>
+                <input type="number" id="height-input" min="100" value="600" style="width:90px;" />
+                <button id="apply-res">Apply</button>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>Background</label>
+            <div class="control-inline">
+                <label style="display:flex; align-items:center; gap:6px;">
+                    <input type="checkbox" id="bg-transparent" checked /> Transparent
+                </label>
+                <input type="color" id="bg-color" value="#ffffff" />
+            </div>
+        </div>
+        <div class="control-group">
+            <button id="clear-model">Clear Model</button>
+        </div>
+        <div class="control-group">
+            <div id="status-log" class="status-log"></div>
+        </div>
     </div>
     
     <canvas id="canvas" width="800" height="600" style="display: none;"></canvas>
@@ -241,6 +324,8 @@
                     });
                     // 双击画布快速开关
                     this.app.view.addEventListener('dblclick', () => this.toggleInfoPanel());
+                    // 绑定控制面板事件
+                    this.setupControls();
                     
                     // 通知Python预览器已准备就绪
                     this.sendMessage('ready', {});
@@ -423,6 +508,7 @@
             
             async loadModel(modelPath, modelData) {
                 try {
+                    this.modelPath = modelPath;
                     // 移除占位符文字
                     if (this.placeholderText) {
                         this.app.stage.removeChild(this.placeholderText);
@@ -504,6 +590,8 @@
                     }, 300);
                     
                     this.sendMessage('modelLoaded', { path: modelPath });
+                    // 更新控制面板选项（表达与动作）
+                    this.updateControlsFromModel();
                     
                 } catch (error) {
                     console.error('模型加载失败:', error);
@@ -821,6 +909,159 @@
                 } else {
                     infoEl.style.display = 'none';
                     if (toggleBtn) toggleBtn.textContent = 'Show Panel [H]';
+                }
+            }
+
+            // 控制面板交互与事件绑定
+            setupControls() {
+                const exprSelect = document.getElementById('expression-select');
+                const motionList = document.getElementById('motion-list');
+                const opacitySlider = document.getElementById('opacity-slider');
+                const opacityLabel = document.getElementById('opacity-label');
+                const rotationSlider = document.getElementById('rotation-slider');
+                const rotationLabel = document.getElementById('rotation-label');
+                const resSelect = document.getElementById('resolution-select');
+                const customRes = document.getElementById('custom-res');
+                const widthInput = document.getElementById('width-input');
+                const heightInput = document.getElementById('height-input');
+                const applyRes = document.getElementById('apply-res');
+                const bgTransparent = document.getElementById('bg-transparent');
+                const bgColor = document.getElementById('bg-color');
+                const clearBtn = document.getElementById('clear-model');
+
+                // 表情切换
+                if (exprSelect) {
+                    exprSelect.addEventListener('change', () => {
+                        const expr = exprSelect.value || '';
+                        this.setExpression(expr);
+                    });
+                }
+
+                // 动作播放
+                if (motionList) {
+                    motionList.addEventListener('click', (ev) => {
+                        const li = ev.target.closest('li');
+                        if (!li) return;
+                        const group = li.getAttribute('data-group');
+                        const indexAttr = li.getAttribute('data-index');
+                        const index = indexAttr ? parseInt(indexAttr, 10) : undefined;
+                        if (group) this.playMotion(index !== undefined ? { motion: group, index } : group);
+                    });
+                }
+
+                // 透明度
+                if (opacitySlider && opacityLabel) {
+                    const updateOpacity = () => {
+                        const val = Math.max(0, Math.min(100, parseInt(opacitySlider.value, 10) || 0));
+                        opacityLabel.textContent = `${val}%`;
+                        this.setCanvasOpacity(val / 100);
+                    };
+                    opacitySlider.addEventListener('input', updateOpacity);
+                    updateOpacity();
+                }
+
+                // 旋转角度
+                if (rotationSlider && rotationLabel) {
+                    const updateRotation = () => {
+                        const val = Math.max(-180, Math.min(180, parseInt(rotationSlider.value, 10) || 0));
+                        rotationLabel.textContent = `${val}°`;
+                        this.setRotationAngle(val);
+                    };
+                    rotationSlider.addEventListener('input', updateRotation);
+                    updateRotation();
+                }
+
+                // 分辨率选择
+                if (resSelect) {
+                    resSelect.addEventListener('change', () => {
+                        const val = resSelect.value;
+                        if (val === 'auto') {
+                            customRes.style.display = 'none';
+                            this.setResolution(undefined, undefined, true);
+                        } else if (val === 'custom') {
+                            customRes.style.display = 'flex';
+                        } else {
+                            customRes.style.display = 'none';
+                            const [w, h] = val.split('x').map(v => parseInt(v, 10));
+                            this.setResolution(w, h, false);
+                        }
+                    });
+                }
+                if (applyRes) {
+                    applyRes.addEventListener('click', () => {
+                        const w = parseInt(widthInput.value, 10) || 800;
+                        const h = parseInt(heightInput.value, 10) || 600;
+                        this.setResolution(w, h, false);
+                    });
+                }
+
+                // 背景设置
+                if (bgTransparent) {
+                    const applyBackground = () => {
+                        const transparent = bgTransparent.checked;
+                        const color = bgColor ? bgColor.value : '#ffffff';
+                        this.setBackground(transparent, color);
+                    };
+                    bgTransparent.addEventListener('change', applyBackground);
+                    if (bgColor) bgColor.addEventListener('input', applyBackground);
+                    applyBackground();
+                }
+
+                // 清除模型
+                if (clearBtn) {
+                    clearBtn.addEventListener('click', () => this.clearModel());
+                }
+            }
+
+            // 从模型数据或JSON填充表达与动作列表
+            async updateControlsFromModel() {
+                try {
+                    let data = this.modelData;
+                    if (!data && this.modelPath) {
+                        try {
+                            const resp = await fetch(this.modelPath);
+                            data = await resp.json();
+                        } catch (e) {
+                            console.warn('无法获取模型JSON以填充控制面板:', e);
+                        }
+                    }
+
+                    // 表情列表
+                    const exprSelect = document.getElementById('expression-select');
+                    if (exprSelect) {
+                        // 清空并追加默认项
+                        exprSelect.innerHTML = '<option value="">None</option>';
+                        const expressions = data && data.FileReferences && Array.isArray(data.FileReferences.Expressions)
+                            ? data.FileReferences.Expressions
+                            : [];
+                        expressions.forEach(item => {
+                            const name = item && (item.Name || item.name || item.Id || item.id) || '';
+                            if (name) {
+                                const opt = document.createElement('option');
+                                opt.value = name;
+                                opt.textContent = name;
+                                exprSelect.appendChild(opt);
+                            }
+                        });
+                    }
+
+                    // 动作列表（按组显示）
+                    const motionList = document.getElementById('motion-list');
+                    if (motionList) {
+                        motionList.innerHTML = '';
+                        const motions = data && data.FileReferences && data.FileReferences.Motions
+                            ? data.FileReferences.Motions
+                            : null;
+                        const groups = motions ? Object.keys(motions) : this.getMotionGroups();
+                        groups.forEach(group => {
+                            const li = document.createElement('li');
+                            li.textContent = group;
+                            li.setAttribute('data-group', group);
+                            motionList.appendChild(li);
+                        });
+                    }
+                } catch (err) {
+                    console.warn('填充控制面板失败:', err);
                 }
             }
         }

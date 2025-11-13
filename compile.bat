@@ -48,10 +48,11 @@ python -m nuitka --onefile ^
     --enable-plugin=pyqt5 ^
     --output-dir=build ^
     --windows-console-mode=disable ^
+    --include-data-dir=./GUI/assets=GUI/assets ^
     --include-data-dir=./Img=Img ^
     --include-package=qfluentwidgets,filetype,live2d,numpy,fastapi,uvicorn,starlette ^
     --windows-icon-from-ico=Img/icon.ico ^
-    --nofollow-import-to=matplotlib,scipy,pandas,tkinter ^
+    --nofollow-import-to=matplotlib,scipy,pandas,tkinter,PyQtWebEngine,PyQt5.QtWebEngineWidgets,PyQt5.QtWebEngineCore ^
     --python-flag=no_site ^
     --python-flag=no_docstrings ^
     --remove-output ^

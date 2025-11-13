@@ -298,16 +298,15 @@ class WebLive2DWidget(QWidget):
 
         layout.addWidget(status_group)
 
-        # 浏览器预览（仅开发环境）
-        if not getattr(sys, 'frozen', False):
-            preview_group = QGroupBox("Web Preview (Dev)")
-            preview_layout = QVBoxLayout(preview_group)
+        # 浏览器预览（在开发与打包环境都可用）
+        preview_group = QGroupBox("Web Preview")
+        preview_layout = QVBoxLayout(preview_group)
 
-            self.open_browser_btn = PushButton("Open Preview in Browser")
-            self.open_browser_btn.clicked.connect(self.openPreviewInBrowser)
-            preview_layout.addWidget(self.open_browser_btn)
+        self.open_browser_btn = PushButton("Open Preview in Browser")
+        self.open_browser_btn.clicked.connect(self.openPreviewInBrowser)
+        preview_layout.addWidget(self.open_browser_btn)
 
-            layout.addWidget(preview_group)
+        layout.addWidget(preview_group)
 
         layout.addStretch()
         return panel
@@ -341,21 +340,21 @@ class WebLive2DWidget(QWidget):
 
     def setupWebContent(self):
         """设置Web内容（加载静态HTML或在打包环境下使用URL代理）"""
-        # 打包环境下自动使用FastAPI URL代理，避免直接加载本地文件
-        if getattr(sys, 'frozen', False):
-            try:
-                from GUI.web_server import start_server
-                port = start_server(host='127.0.0.1', port=0)
-                self.proxy_port = port
-                proxy_url = f"http://127.0.0.1:{port}/static/live2d/index.html"
-                print(f"打包环境检测到，使用URL代理: {proxy_url}")
-                if self.web_view:
-                    self.web_view.setUrl(QUrl(proxy_url))
-                self.statusChanged.emit(f"Using URL proxy at {proxy_url}")
-                return
-            except Exception as e:
-                print(f"启动URL代理失败，回退到本地文件: {e}")
-                # 回退到本地文件加载
+        # 优先尝试使用本地FastAPI代理（在打包与开发环境皆可），避免 file:// 资源加载问题
+        try:
+            from GUI.web_server import start_server
+            port = start_server(host='127.0.0.1', port=0)
+            self.proxy_port = port
+            # 嵌入式视图使用精简版 index.html（无控制面板）
+            proxy_url = f"http://127.0.0.1:{port}/static/live2d/index.html"
+            print(f"使用URL代理: {proxy_url}")
+            if self.web_view:
+                self.web_view.setUrl(QUrl(proxy_url))
+            self.statusChanged.emit(f"Using URL proxy at {proxy_url}")
+            return
+        except Exception as e:
+            print(f"启动URL代理失败，回退到本地文件: {e}")
+            # 回退到本地文件加载
 
         # 非打包环境或代理失败，按原逻辑加载本地文件
         if not self.web_view:
@@ -419,7 +418,7 @@ class WebLive2DWidget(QWidget):
             except Exception as e:
                 self.addStatusMessage(f"Failed to mount model dir for browser preview: {e}")
 
-        url = f"http://127.0.0.1:{self.proxy_port}/static/live2d/index.html{query}"
+        url = f"http://127.0.0.1:{self.proxy_port}/static/live2d/web.html{query}"
         QDesktopServices.openUrl(QUrl(url))
         self.addStatusMessage(f"Opened browser preview: {url}")
 
@@ -435,6 +434,19 @@ class WebLive2DWidget(QWidget):
 
     def loadModelFromFolder(self, folder_path):
         """从文件夹加载Live2D模型，带验证和错误恢复"""
+        # 若嵌入式 Web 视图可用但代理未启动，尝试懒启动以确保通过 HTTP 加载资源
+        if self.web_view and not self.proxy_port:
+            try:
+                from GUI.web_server import start_server
+                self.proxy_port = start_server(host='127.0.0.1', port=0)
+                # 嵌入式视图仍使用 index.html
+                proxy_url = f"http://127.0.0.1:{self.proxy_port}/static/live2d/index.html"
+                self.web_view.setUrl(QUrl(proxy_url))
+                self.addStatusMessage(f"Started web proxy for embedded view: {proxy_url}")
+            except Exception as e:
+                self.addStatusMessage(f"Failed to start embedded web proxy: {e}")
+                # 继续尝试本地文件方案
+
         self.current_model_path = folder_path
         self.model_path_label.setText(f"Model Path: {folder_path}")
 
@@ -659,8 +671,27 @@ class WebLive2DWidget(QWidget):
 
     def sendMessageToWeb(self, msg_type, data):
         """向Web视图发送消息"""
+        # 同步广播到外部浏览器预览（通过本地代理）
+        try:
+            if self.proxy_port:
+                import json as _json
+                import urllib.request as _ureq
+                payload = _json.dumps({"type": msg_type, **data}).encode('utf-8')
+                req = _ureq.Request(
+                    f"http://127.0.0.1:{self.proxy_port}/api/preview/broadcast",
+                    data=payload,
+                    headers={"Content-Type": "application/json"}
+                )
+                _ureq.urlopen(req, timeout=1.5)
+        except Exception as e:
+            # 失败不影响本地嵌入式预览
+            try:
+                self.addStatusMessage(f"Broadcast failed: {e}")
+            except Exception:
+                pass
+
         if not self.web_view:
-            # 在无 WebEngine 的构建中静默忽略，左侧面板仍可使用
+            # 在无 WebEngine 的构建中不执行嵌入式 JS 注入
             return
         script = f"""
         if (window.live2dPreview) {{

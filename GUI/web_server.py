@@ -2,13 +2,14 @@ import os
 import sys
 import socket
 import threading
+import json
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 import uuid
-from typing import Dict
+from typing import Dict, Set
 
 
 def _resolve_assets_dir() -> Path:
@@ -49,8 +50,8 @@ app.mount("/static", StaticFiles(directory=str(assets_dir), html=True), name="st
 
 @app.get("/")
 def root():
-    # Redirect to the Live2D index page under static mount
-    return RedirectResponse(url="/static/live2d/index.html")
+    # Redirect to the Live2D web page with embedded controls
+    return RedirectResponse(url="/static/live2d/web.html")
 
 
 def _find_free_port(host: str = "127.0.0.1") -> int:
@@ -62,14 +63,44 @@ def _find_free_port(host: str = "127.0.0.1") -> int:
 
 
 def start_server(host: str = "127.0.0.1", port: int = 0) -> int:
-    """Start uvicorn server as a daemon thread and return the actual port."""
+    """Start uvicorn server as a daemon thread and return the actual port.
+
+    Uses a minimal logging configuration to avoid dynamic formatter imports
+    (e.g., 'uvicorn.logging.DefaultFormatter') that can break in packaged builds.
+    """
     try:
         import uvicorn
     except ImportError:
         raise RuntimeError("uvicorn is required to start the web proxy. Please install 'uvicorn'.")
 
     actual_port = port or _find_free_port(host)
-    config = uvicorn.Config(app, host=host, port=actual_port, log_level="info")
+
+    # Minimal logging config that relies only on stdlib logging.Formatter
+    simple_log_config = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {"format": "%(levelname)s %(name)s: %(message)s"},
+            "access": {"format": "%(levelname)s %(client_addr)s - \"%(request_line)s\" %(status_code)s"},
+        },
+        "handlers": {
+            "console": {"class": "logging.StreamHandler", "formatter": "default"},
+            "access": {"class": "logging.StreamHandler", "formatter": "access"},
+        },
+        "loggers": {
+            "uvicorn": {"handlers": ["console"], "level": "INFO"},
+            "uvicorn.error": {"handlers": ["console"], "level": "INFO"},
+            "uvicorn.access": {"handlers": ["access"], "level": "INFO"},
+        },
+    }
+
+    config = uvicorn.Config(
+        app,
+        host=host,
+        port=actual_port,
+        log_level="info",
+        log_config=simple_log_config,
+    )
     server = uvicorn.Server(config)
 
     t = threading.Thread(target=server.run, daemon=True)
@@ -104,3 +135,50 @@ def mount_model_dir(dir_path: str) -> str:
     app.mount(base_path, StaticFiles(directory=str(p), html=False), name=f"model_{mount_id}")
     _mounted_models[mount_id] = p
     return base_path
+
+
+# ---------------- Preview message bus (WebSocket + HTTP broadcast) ----------------
+
+_preview_clients: Set[WebSocket] = set()
+
+
+@app.websocket("/ws/preview")
+async def ws_preview(ws: WebSocket):
+    await ws.accept()
+    _preview_clients.add(ws)
+    try:
+        while True:
+            # We don't expect messages from clients; just keep the connection alive
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        try:
+            _preview_clients.remove(ws)
+        except KeyError:
+            pass
+
+
+async def _broadcast_to_clients(message: dict):
+    # Send to a snapshot of current clients to avoid set mutation issues
+    dead_clients = []
+    for ws in list(_preview_clients):
+        try:
+            await ws.send_text(json.dumps(message))
+        except Exception:
+            dead_clients.append(ws)
+    # Cleanup dead clients
+    for ws in dead_clients:
+        try:
+            _preview_clients.remove(ws)
+        except KeyError:
+            pass
+
+
+@app.post("/api/preview/broadcast")
+async def http_broadcast(request: Request):
+    """Accept JSON and broadcast to all connected preview clients."""
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {"type": "error", "message": "Invalid JSON"}
+    await _broadcast_to_clients(payload)
+    return {"ok": True, "clients": len(_preview_clients)}
