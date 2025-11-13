@@ -459,4 +459,10 @@ class ExtractorPage(QFrame):
             self.settings_manager.set("last_output_path", output_path)
         
         # 进度条高度
-        self.progress_bar.setMinimumHeight(int(20 * scale_factor))
+        # 使用当前窗口宽度计算缩放比例，避免未定义变量
+        try:
+            window_width = self.width() or (self.parent().width() if self.parent() else 1000)
+        except Exception:
+            window_width = 1000
+        scale_factor_local = max(1.0, window_width / 1000.0)
+        self.progress_bar.setMinimumHeight(int(20 * scale_factor_local))
