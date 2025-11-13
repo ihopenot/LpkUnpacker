@@ -12,6 +12,9 @@ if "%ENV_NAME%"=="" set ENV_NAME=venv1
 
 echo ===== LpkUnpackerGUI Compiler (Conda env: %ENV_NAME%) =====
 
+REM Enable light build to skip native Live2D preview (OpenGL/numpy/live2d)
+set LPK_DISABLE_NATIVE_PREVIEW=1
+
 REM 1) Ensure Conda exists
 where conda >nul 2>&1
 if %ERRORLEVEL% neq 0 (
@@ -57,16 +60,22 @@ if %ERRORLEVEL% neq 0 (
 
 REM 6) Compile with Nuitka (includes GUI/assets and FastAPI proxy)
 echo Compiling application with Nuitka...
+REM Define lists as variables to avoid argument splitting
+set QT_PLUGIN_SKIP=qml,quick,webengine,webview,printsupport,serialport,position,texttospeech,virtualkeyboard,wayland,xcbglintegrations,bearer,sql,multimedia
+set NOFOLLOW_PKGS=matplotlib,scipy,pandas,tkinter,PyQtWebEngine,PyQt5.QtWebEngineWidgets,PyQt5.QtWebEngineCore,numpy,OpenGL,live2d,GUI.Live2DCanvas,GUI.Live2DPreviewWindow,GUI.PreviewPage
 python -m nuitka --onefile ^
     --enable-plugin=pyqt5 ^
     --output-dir=build ^
     --windows-console-mode=disable ^
     --msvc=latest ^
+    --jobs=%NUMBER_OF_PROCESSORS% ^
+    --lto=no ^
     --include-data-dir=./Img=Img ^
     --include-data-dir=./GUI/assets=GUI/assets ^
-    --include-package=qfluentwidgets,filetype,live2d,numpy,fastapi,uvicorn,starlette ^
     --windows-icon-from-ico=Img/icon.ico ^
-    --nofollow-import-to=matplotlib,scipy,pandas,tkinter,PyQtWebEngine,PyQt5.QtWebEngineWidgets,PyQt5.QtWebEngineCore ^
+    --nofollow-import-to="%NOFOLLOW_PKGS%" ^
+    --noinclude-qt-translations ^
+    --noinclude-qt-plugins="%QT_PLUGIN_SKIP%" ^
     --python-flag=no_site ^
     --python-flag=no_docstrings ^
     LpkUnpackerGUI.py

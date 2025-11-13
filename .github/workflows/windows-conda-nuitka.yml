@@ -43,6 +43,20 @@ jobs:
             pip-windows-py3.10-
             pip-windows-
 
+      - name: Set Nuitka cache dir
+        shell: pwsh
+        run: |
+          echo "NUITKA_CACHE_DIR=$env:LOCALAPPDATA\Nuitka\Cache" >> $env:GITHUB_ENV
+
+      - name: Cache Nuitka compilation cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUITKA_CACHE_DIR }}
+          key: nuitka-cache-windows-py3.10-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            nuitka-cache-windows-py3.10-
+            nuitka-cache-windows-
+
       - name: Create Conda env venv1
         shell: bash -l {0}
         run: |
@@ -68,6 +82,8 @@ jobs:
       - name: Build (Nuitka via compile_env.bat)
         shell: cmd
         run: |
+          set LPK_DISABLE_NATIVE_PREVIEW=1
+          set NUITKA_CACHE_DIR=%NUITKA_CACHE_DIR%
           call .\compile_env.bat venv1
 
       - name: Upload artifact

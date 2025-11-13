@@ -4,6 +4,7 @@ from PyQt5.QtGui import QIcon, QFont, QResizeEvent
 from qfluentwidgets import NavigationItemPosition, FluentWindow, setTheme, Theme, setFont
 from qfluentwidgets import FluentIcon as FIF
 from Core.settings_manager import SettingsManager
+import os
 
 # Import pages - using try/except to handle potential import errors
 try:
@@ -19,13 +20,23 @@ except Exception as e:
             self.setObjectName('extractorPage')
             QHBoxLayout(self).addWidget(QFrame(self))
 
-try:
-    from GUI.PreviewPage import PreviewPage
-except Exception as e:
-    import traceback
-    print(f"Error importing PreviewPage: {e}")
-    traceback.print_exc()
-    # Create a dummy page
+# Conditionally import native preview page to avoid heavy dependencies in light builds
+_DISABLE_NATIVE_PREVIEW = os.environ.get("LPK_DISABLE_NATIVE_PREVIEW", "0") == "1"
+if not _DISABLE_NATIVE_PREVIEW:
+    try:
+        from GUI.PreviewPage import PreviewPage
+    except Exception as e:
+        import traceback
+        print(f"Error importing PreviewPage: {e}")
+        traceback.print_exc()
+        # Create a dummy page
+        class PreviewPage(QFrame):
+            def __init__(self, parent=None):
+                super().__init__(parent)
+                self.setObjectName('previewPage')
+                QHBoxLayout(self).addWidget(QFrame(self))
+else:
+    # Define a minimal stub when native preview is disabled
     class PreviewPage(QFrame):
         def __init__(self, parent=None):
             super().__init__(parent)
@@ -147,7 +158,9 @@ class MainWindow(FluentWindow):
             print(f"Error adding SteamWorkshopPage to navigation: {e}")
             
         try:
-            self.addSubInterface(self.previewPage, FIF.MOVIE, 'Live2D Preview (Native)')
+            # Only add native preview tab when not disabled
+            if not _DISABLE_NATIVE_PREVIEW:
+                self.addSubInterface(self.previewPage, FIF.MOVIE, 'Live2D Preview (Native)')
         except Exception as e:
             print(f"Error adding PreviewPage to navigation: {e}")
             
