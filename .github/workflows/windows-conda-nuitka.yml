@@ -1,0 +1,59 @@
+name: Python Package using Conda (Windows Nuitka Build)
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Miniconda (Python 3.10.19)
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-activate-base: true
+          python-version: 3.10.19
+
+      - name: Create Conda env venv1
+        shell: bash -l {0}
+        run: |
+          conda create -n venv1 python=3.10.19 -y
+          conda activate venv1
+          python -V
+
+      - name: Install dependencies
+        shell: bash -l {0}
+        run: |
+          conda activate venv1
+          pip install -r requirements.txt
+          pip install nuitka
+
+      - name: Lint with flake8
+        shell: bash -l {0}
+        run: |
+          conda activate venv1
+          pip install flake8
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Test with pytest
+        shell: bash -l {0}
+        run: |
+          conda activate venv1
+          pip install pytest
+          pytest -q
+
+      - name: Build (Nuitka via compile_env.bat)
+        shell: cmd
+        run: |
+          call .\compile_env.bat venv1
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LpkUnpackerGUI-windows-x64
+          path: build\LpkUnpackerGUI.exe
