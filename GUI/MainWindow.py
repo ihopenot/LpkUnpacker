@@ -3,6 +3,8 @@ from PyQt5.QtCore import Qt, QEvent, QSize
 from PyQt5.QtGui import QIcon, QFont, QResizeEvent
 from qfluentwidgets import NavigationItemPosition, FluentWindow, setTheme, Theme, setFont
 from qfluentwidgets import FluentIcon as FIF
+from Core.settings_manager import SettingsManager
+import os
 
 # Import pages - using try/except to handle potential import errors
 try:
@@ -18,13 +20,23 @@ except Exception as e:
             self.setObjectName('extractorPage')
             QHBoxLayout(self).addWidget(QFrame(self))
 
-try:
-    from GUI.PreviewPage import PreviewPage
-except Exception as e:
-    import traceback
-    print(f"Error importing PreviewPage: {e}")
-    traceback.print_exc()
-    # Create a dummy page
+# Conditionally import native preview page to avoid heavy dependencies in light builds
+_DISABLE_NATIVE_PREVIEW = os.environ.get("LPK_DISABLE_NATIVE_PREVIEW", "0") == "1"
+if not _DISABLE_NATIVE_PREVIEW:
+    try:
+        from GUI.PreviewPage import PreviewPage
+    except Exception as e:
+        import traceback
+        print(f"Error importing PreviewPage: {e}")
+        traceback.print_exc()
+        # Create a dummy page
+        class PreviewPage(QFrame):
+            def __init__(self, parent=None):
+                super().__init__(parent)
+                self.setObjectName('previewPage')
+                QHBoxLayout(self).addWidget(QFrame(self))
+else:
+    # Define a minimal stub when native preview is disabled
     class PreviewPage(QFrame):
         def __init__(self, parent=None):
             super().__init__(parent)
@@ -50,10 +62,24 @@ except Exception as e:
     import traceback
     print(f"Error importing SteamWorkshopPage: {e}")
     traceback.print_exc()
+    # Create a dummy page
     class SteamWorkshopPage(QFrame):
         def __init__(self, parent=None):
             super().__init__(parent)
             self.setObjectName('steamWorkshopPage')
+            QHBoxLayout(self).addWidget(QFrame(self))
+
+try:
+    from GUI.WebPreviewPage import WebPreviewPage
+except Exception as e:
+    import traceback
+    print(f"Error importing WebPreviewPage: {e}")
+    traceback.print_exc()
+    # Create a dummy page
+    class WebPreviewPage(QFrame):
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.setObjectName('webPreviewPage')
             QHBoxLayout(self).addWidget(QFrame(self))
 
 
@@ -62,6 +88,10 @@ class MainWindow(FluentWindow):
     
     def __init__(self):
         super().__init__()
+        self.setMicaEffectEnabled(False)
+        
+        # Initialize settings manager
+        self.settings_manager = SettingsManager()
         
         # Create sub-interfaces
         try:
@@ -84,7 +114,7 @@ class MainWindow(FluentWindow):
             print(f"Error creating EncryptionPage: {e}")
             self.encryptionPage = QFrame(self)
             self.encryptionPage.setObjectName('encryptionPage')
-
+            
         try:
             self.steamWorkshopPage = SteamWorkshopPage(self)
         except Exception as e:
@@ -93,20 +123,52 @@ class MainWindow(FluentWindow):
             self.steamWorkshopPage.setObjectName('steamWorkshopPage')
             
         try:
+            self.webPreviewPage = WebPreviewPage(self)
+        except Exception as e:
+            print(f"Error creating WebPreviewPage: {e}")
+            self.webPreviewPage = QFrame(self)
+            self.webPreviewPage.setObjectName('webPreviewPage')
+
+        self.initWindow()
+        self.initNavigation()
+        
+        # Set theme from settings
+        self.apply_theme()
+        
+        # 为整个应用设置字体
+        self.updateFontSize()
+        
+        # 安装事件过滤器以处理缩放
+        self.installEventFilter(self)
+        
+    def initWindow(self):
+        self.resize(1000, 700)  # 稍微增大初始窗口尺寸
+        self.setWindowTitle('LPK Unpacker GUI')
+        
+    def initNavigation(self):
+        # Add sub-interfaces to navigation
+        try:
             self.addSubInterface(self.extractorPage, FIF.ZIP_FOLDER, 'LPK Extractor')
         except Exception as e:
             print(f"Error adding ExtractorPage to navigation: {e}")
-
+            
         try:
             self.addSubInterface(self.steamWorkshopPage, FIF.GAME, 'Steam Workshop')
         except Exception as e:
             print(f"Error adding SteamWorkshopPage to navigation: {e}")
-
+            
         try:
-            self.addSubInterface(self.previewPage, FIF.MOVIE, 'Live2D Preview')
+            # Only add native preview tab when not disabled
+            if not _DISABLE_NATIVE_PREVIEW:
+                self.addSubInterface(self.previewPage, FIF.MOVIE, 'Live2D Preview (Native)')
         except Exception as e:
             print(f"Error adding PreviewPage to navigation: {e}")
             
+        try:
+            self.addSubInterface(self.webPreviewPage, FIF.GLOBE, 'Live2D Preview (Web)')
+        except Exception as e:
+            print(f"Error adding WebPreviewPage to navigation: {e}")
+
         self.navigationInterface.addSeparator()
             
         try:
@@ -114,8 +176,6 @@ class MainWindow(FluentWindow):
                               NavigationItemPosition.SCROLL)
         except Exception as e:
             print(f"Error adding EncryptionPage to navigation: {e}")
-        
-        # Steam Workshop already added to top navigation above
             
     def eventFilter(self, obj, event):
         # 监听窗口大小变化事件，调整字体和控件大小
@@ -145,7 +205,45 @@ class MainWindow(FluentWindow):
         font.setPointSize(font_size)
         app.setFont(font)
         
-        pages = [self.extractorPage, self.previewPage, self.encryptionPage, getattr(self, 'steamWorkshopPage', None)]
-        for page in filter(None, pages):
+        # 通知所有页面更新UI缩放
+        for page in [self.extractorPage, self.previewPage, self.encryptionPage, self.steamWorkshopPage]:
             if hasattr(page, 'updateUIScale'):
                 page.updateUIScale(self.width(), self.height())
+    
+    def apply_theme(self):
+        """从设置中应用主题"""
+        try:
+            theme_setting = self.settings_manager.get('theme', 'light').lower()
+            
+            if theme_setting == 'light':
+                setTheme(Theme.LIGHT)
+            elif theme_setting == 'dark':
+                setTheme(Theme.DARK)
+            else:  # 'auto' or any other value
+                setTheme(Theme.LIGHT)  # 默认使用浅色主题而不是AUTO
+                
+            # 强制设置窗口背景色为白色
+            self.setStyleSheet("""
+                QWidget {
+                    background-color: white;
+                    color: black;
+                }
+                QFrame {
+                    background-color: white;
+                }
+            """)
+                
+            print(f"Applied theme: {theme_setting}")
+        except Exception as e:
+            print(f"Error applying theme: {e}")
+            # Fallback to light theme
+            setTheme(Theme.LIGHT)
+            self.setStyleSheet("""
+                QWidget {
+                    background-color: white;
+                    color: black;
+                }
+                QFrame {
+                    background-color: white;
+                }
+            """)
