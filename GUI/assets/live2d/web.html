@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Live2D Preview</title>
+    <!-- Live2D Cubism Core (v4) & Live2D v2 runtime -->
+    <script src="../vender/live2dcubismcore.min.js"></script>
+    <script src="../vender/live2d.min.js"></script>
+
+    <!-- PixiJS v7 and expose to window for plugin -->
+    <script src="../vender/pixi.min.js"></script>
+    <script>
+        window.PIXI = PIXI;
+    </script>
+
+    <!-- pixi-live2d-display（同时支持 Cubism 2.1 与 4） -->
+    <script src="../vender/index.min.js"></script>
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        #canvas {
+            border: 2px solid #fff;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            background: rgba(255,255,255,0.1);
+            width: 90vw;
+            height: 85vh;
+        }
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            min-width: 200px;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 18px;
+            text-align: center;
+        }
+        .spinner {
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #error {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff6b6b;
+            background: rgba(0,0,0,0.8);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            max-width: 400px;
+        }
+        #ui-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+        }
+        #toggle-info {
+            appearance: none;
+            border: none;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+        }
+        #toggle-info:hover { background: rgba(0,0,0,0.75); }
+        .info-section {
+            margin-bottom: 10px;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+        }
+        .info-section:last-child {
+            border-bottom: none;
+        }
+        .info-label {
+            font-weight: bold;
+            color: #ffd93d;
+        }
+        /* 右侧控制面板样式 */
+        #control-panel {
+            position: absolute;
+            top: 60px;
+            right: 20px;
+            width: 320px;
+            max-height: 80vh;
+            overflow: auto;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            padding: 12px 14px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        .control-group { margin-bottom: 12px; }
+        .control-group label { display: block; font-size: 13px; margin-bottom: 6px; color: #ffd93d; }
+        .control-group input[type="range"] { width: 100%; }
+        .control-inline { display: flex; gap: 8px; align-items: center; }
+        #motion-list { list-style: none; margin: 0; padding: 0; }
+        #motion-list li { padding: 6px 8px; border-radius: 6px; cursor: pointer; background: rgba(255,255,255,0.08); margin-bottom: 6px; }
+        #motion-list li:hover { background: rgba(255,255,255,0.18); }
+        .status-log { background: rgba(0,0,0,0.4); border-radius: 6px; padding: 6px; max-height: 150px; overflow: auto; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <div class="spinner"></div>
+        <div>Preparing Live2D Previewer...</div>
+        <div style="font-size: 12px; margin-top: 10px; opacity: 0.8;">
+            Loading rendering engine...
+        </div>
+    </div>
+    
+    <div id="error" style="display: none;">
+        <h3>❌ Loading Failed</h3>
+        <p id="error-message">Unknown error</p>
+        <div style="font-size: 12px; margin-top: 15px; opacity: 0.8;">
+            Please check network connection or refresh page to retry
+        </div>
+    </div>
+    
+    <div id="info" style="display: none;">
+        <div class="info-section">
+            <div class="info-label">🎭 Live2D Web Previewer</div>
+        </div>
+        <div class="info-section">
+            <div class="info-label">Model Info</div>
+            <div id="model-info">No model loaded</div>
+        </div>
+        <div class="info-section">
+            <div class="info-label">Expression</div>
+            <div id="expression-info">None</div>
+        </div>
+        <div class="info-section">
+            <div class="info-label">Motion</div>
+            <div id="motion-info">None</div>
+        </div>
+    </div>
+    <div id="ui-controls">
+        <button id="toggle-info" title="Shortcut: H or Double-click canvas">Hide Panel [H]</button>
+    </div>
+    <!-- 内嵌控制面板（替代软件左侧面板） -->
+    <div id="control-panel">
+        <div class="control-group">
+            <label>Expression</label>
+            <select id="expression-select">
+                <option value="">None</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label>Motion Groups</label>
+            <ul id="motion-list"></ul>
+        </div>
+        <div class="control-group">
+            <label>Opacity</label>
+            <div class="control-inline">
+                <input type="range" id="opacity-slider" min="0" max="100" value="100" />
+                <span id="opacity-label">100%</span>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>Rotation</label>
+            <div class="control-inline">
+                <input type="range" id="rotation-slider" min="-180" max="180" value="0" />
+                <span id="rotation-label">0°</span>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>Resolution</label>
+            <select id="resolution-select">
+                <option value="auto">Auto</option>
+                <option value="800x600">800 × 600</option>
+                <option value="1024x768">1024 × 768</option>
+                <option value="1280x720">1280 × 720</option>
+                <option value="1920x1080">1920 × 1080</option>
+                <option value="2560x1440">2560 × 1440</option>
+                <option value="3840x2160">3840 × 2160</option>
+                <option value="custom">Custom…</option>
+            </select>
+            <div id="custom-res" class="control-inline" style="margin-top:6px; display:none;">
+                <input type="number" id="width-input" min="100" value="800" style="width:90px;" />
+                <span>×</span>
+                <input type="number" id="height-input" min="100" value="600" style="width:90px;" />
+                <button id="apply-res">Apply</button>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>Background</label>
+            <div class="control-inline">
+                <label style="display:flex; align-items:center; gap:6px;">
+                    <input type="checkbox" id="bg-transparent" checked /> Transparent
+                </label>
+                <input type="color" id="bg-color" value="#ffffff" />
+            </div>
+        </div>
+        <div class="control-group">
+            <button id="clear-model">Clear Model</button>
+        </div>
+        <div class="control-group">
+            <div id="status-log" class="status-log"></div>
+        </div>
+    </div>
+    
+    <canvas id="canvas" width="800" height="600" style="display: none;"></canvas>
+    
+    <script>
+        // Live2D Web预览器 - 使用PIXI.js和Live2D Cubism SDK
+        class Live2DPreview {
+            constructor() {
+                this.app = null;
+                this.model = null;
+                this.modelData = null;
+                this.currentExpression = null;
+                this.currentMotion = null;
+                this.canvasWidth = 800;  // 实际的CSS像素宽度
+                this.canvasHeight = 600; // 实际的CSS像素高度
+                this.init();
+            }
+            
+            async init() {
+                try {
+                    // 检查Live2D SDK是否加载
+                    if (typeof PIXI === 'undefined') {
+                        throw new Error('PIXI.js not loaded');
+                    }
+                    
+                    // 获取canvas元素并计算初始尺寸
+                    const canvas = document.getElementById('canvas');
+                    // 修复高 DPI 显示器上的尺寸问题
+                    // 使用 clientWidth/Height 而不是直接使用窗口尺寸
+                    let containerWidth = canvas.clientWidth || canvas.offsetWidth || 800;
+                    let containerHeight = canvas.clientHeight || canvas.offsetHeight || 600;
+                    
+                    // 如果 canvas 还没有被渲染，使用窗口尺寸作为后备
+                    if (containerWidth === 0 || containerHeight === 0) {
+                        containerWidth = window.innerWidth * 0.9;
+                        containerHeight = window.innerHeight * 0.85;
+                    }
+                    
+                    console.log(`Initial container size: ${containerWidth}x${containerHeight}, DPR: ${window.devicePixelRatio}`);
+                    
+                    // 初始化PIXI应用，使用动态尺寸
+                    // 在高 DPI 显示器上，使用固定 resolution=1 来避免定位问题
+                    this.app = new PIXI.Application({
+                        view: canvas,
+                        width: Math.max(400, Math.floor(containerWidth)),
+                        height: Math.max(300, Math.floor(containerHeight)),
+                        backgroundColor: 0x1099bb,
+                        backgroundAlpha: 0.1,
+                        resolution: window.devicePixelRatio || 1,
+                        autoDensity: true 
+                    });
+                    
+                    // 设置舞台
+                    this.setupStage();
+
+                    // 根据视口尺寸自适应渲染器大小
+                    this.updateCanvasSize();
+                    
+                    // 添加窗口大小变化监听
+                    window.addEventListener('resize', () => {
+                        this.updateCanvasSize();
+                        if (this.model) {
+                            this.fitModelToView();
+                        }
+                    });
+                    
+                    // 添加定时器确保初始渲染正确
+                    setTimeout(() => {
+                        this.updateCanvasSize();
+                        if (this.model) {
+                            this.fitModelToView();
+                        }
+                    }, 50);
+                    
+                    // 监听来自Python的消息
+                    window.addEventListener('message', (event) => {
+                        this.handleMessage(event.data);
+                    });
+                    
+                    // 显示画布和信息面板
+                    document.getElementById('canvas').style.display = 'block';
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('info').style.display = 'block';
+                    this.infoVisible = true;
+                    const toggleBtn = document.getElementById('toggle-info');
+                    if (toggleBtn) {
+                        toggleBtn.addEventListener('click', () => this.toggleInfoPanel());
+                    }
+                    window.addEventListener('keydown', (e) => {
+                        if (e.key === 'h' || e.key === 'H') this.toggleInfoPanel();
+                    });
+                    // 双击画布快速开关
+                    this.app.view.addEventListener('dblclick', () => this.toggleInfoPanel());
+                    // 绑定控制面板事件
+                    this.setupControls();
+                    
+                    // 通知Python预览器已准备就绪
+                    this.sendMessage('ready', {});
+
+                    // 如果通过 URL 参数提供了模型信息，则自动加载
+                    try {
+                        const params = new URLSearchParams(window.location.search);
+                        const directUrl = params.get('modelUrl');
+                        const base = params.get('modelBase');
+                        const entry = params.get('modelJson');
+                        let autoUrl = null;
+                        if (directUrl) {
+                            autoUrl = directUrl;
+                        } else if (base && entry) {
+                            autoUrl = base.replace(/\/$/, '') + '/' + entry.replace(/^\//, '');
+                        }
+                        if (autoUrl) {
+                            console.log('Auto-loading model from URL params:', autoUrl);
+                            await this.loadModel(autoUrl, null);
+                        }
+                    } catch (e) {
+                        console.warn('Failed to parse URL params for auto model load:', e);
+                    }
+
+                    // 连接 WebSocket 接收程序广播的控制消息，实现与左侧面板同步
+                    try {
+                        const wsProto = (location.protocol === 'https:') ? 'wss' : 'ws';
+                        const wsUrl = `${wsProto}://${location.host}/ws/preview`;
+                        console.log('Connecting WebSocket:', wsUrl);
+                        const ws = new WebSocket(wsUrl);
+                        ws.onopen = () => console.log('WebSocket connected');
+                        ws.onmessage = (ev) => {
+                            try {
+                                const msg = JSON.parse(ev.data);
+                                this.handleMessage(msg);
+                            } catch (err) {
+                                console.warn('WS message parse failed:', err);
+                            }
+                        };
+                        ws.onerror = (err) => console.warn('WebSocket error:', err);
+                        ws.onclose = () => console.log('WebSocket closed');
+                        this.ws = ws;
+                    } catch (err) {
+                        console.warn('Failed to setup WebSocket:', err);
+                    }
+                
+                } catch (error) {
+                    this.showError('Initialization failed: ' + error.message);
+                }
+            }
+            
+            setupStage() {
+                // 添加背景
+                this.background = new PIXI.Graphics();
+                this.drawBackground();
+                this.app.stage.addChild(this.background);
+                
+                // 添加提示文字
+                const style = new PIXI.TextStyle({
+                    fontFamily: 'Arial',
+                    fontSize: 24,
+                    fill: 0xffffff,
+                    align: 'center',
+                    dropShadow: true,
+                    dropShadowColor: 0x000000,
+                    dropShadowBlur: 4,
+                    dropShadowDistance: 2
+                });
+                
+                const text = new PIXI.Text('Please select Live2D model folder', style);
+                text.anchor.set(0.5);
+                // 位置稍后在updateCanvasSize中设置，此时renderer可能还未完全初始化
+                this.app.stage.addChild(text);
+                this.placeholderText = text;
+            }
+
+            drawBackground() {
+                this.background.clear();
+                this.background.beginFill(0x667eea, 0.1);
+                this.background.drawRect(0, 0, this.canvasWidth, this.canvasHeight);
+                this.background.endFill();
+            }
+
+            updateCanvasSize() {
+                try {
+                    const canvas = this.app.view;
+                    
+                    // 获取容器的实际可见尺寸（CSS 像素）
+                    let targetW = canvas.clientWidth || canvas.offsetWidth;
+                    let targetH = canvas.clientHeight || canvas.offsetHeight;
+                    
+                    // 如果容器尺寸无效，使用父元素或窗口尺寸
+                    if (!targetW || !targetH) {
+                        const parent = canvas.parentElement;
+                        targetW = parent ? parent.clientWidth : window.innerWidth * 0.9;
+                        targetH = parent ? parent.clientHeight : window.innerHeight * 0.85;
+                    }
+                    
+                    // 确保尺寸合理（使用整数避免模糊）
+                    targetW = Math.floor(Math.max(400, Math.min(targetW, window.innerWidth * 0.95)));
+                    targetH = Math.floor(Math.max(300, Math.min(targetH, window.innerHeight * 0.95)));
+                    
+                    // 保存实际的CSS像素尺寸
+                    this.canvasWidth = targetW;
+                    this.canvasHeight = targetH;
+                    
+                    console.log(`Updating canvas size to: ${targetW}x${targetH} (CSS pixels), DPR: ${window.devicePixelRatio}`);
+                    
+                    // 更新渲染器尺寸
+                    this.app.renderer.resize(targetW, targetH);
+                    
+                    // 更新 canvas 的 CSS 尺寸以匹配
+                    canvas.style.width = targetW + 'px';
+                    canvas.style.height = targetH + 'px';
+                    
+                    // 重绘背景
+                    this.drawBackground();
+                    
+                    // 更新占位符位置（使用渲染器的逻辑尺寸，即resize传入的尺寸）
+                    if (this.placeholderText) {
+                        this.placeholderText.x = targetW / 2;
+                        this.placeholderText.y = targetH / 2;
+                        console.log(`Placeholder text positioned at: ${this.placeholderText.x}, ${this.placeholderText.y}`);
+                    }
+                    
+                    // 如果有模型，重新适配到视图中心
+                    if (this.model) {
+                        setTimeout(() => {
+                            this.fitModelToView({ mode: 'contain', margin: 50, alignX: 0.5, alignY: 0.5 });
+                        }, 10);
+                    }
+                    
+                } catch (error) {
+                    console.warn('Error updating canvas size:', error);
+                }
+            }
+            
+            handleMessage(data) {
+                try {
+                    switch(data.type) {
+                        case 'loadModel':
+                            // 优先使用file:// URL，避免Windows本地路径导致加载失败
+                            this.loadModel(data.modelUrl || data.modelPath, data.modelData);
+                            break;
+                        case 'setExpression':
+                            this.setExpression(data.expression);
+                            break;
+                        case 'playMotion':
+                            this.playMotion(data.motion);
+                            break;
+                        case 'setParameter':
+                            this.setParameter(data.parameter, data.value);
+                            break;
+                        case 'toggleInfo':
+                            this.toggleInfoPanel(typeof data.visible === 'boolean' ? data.visible : undefined);
+                            break;
+                        case 'setCanvasOpacity':
+                            this.setCanvasOpacity(data.opacity);
+                            break;
+                        case 'setRotationAngle':
+                            this.setRotationAngle(data.angle);
+                            break;
+                        case 'setBackground':
+                            this.setBackground(data.transparent, data.color);
+                            break;
+                        case 'setResolution':
+                            this.setResolution(data.width, data.height, data.auto);
+                            break;
+                        case 'clearModel':
+                            this.clearModel();
+                            break;
+                        case 'updateCanvas':
+                            this.updateCanvasSize();
+                            break;
+                    }
+                } catch (error) {
+                    this.showError('Message processing failed: ' + error.message);
+                }
+            }
+            
+            async loadModel(modelPath, modelData) {
+                try {
+                    this.modelPath = modelPath;
+                    // 移除占位符文字
+                    if (this.placeholderText) {
+                        this.app.stage.removeChild(this.placeholderText);
+                        this.placeholderText = null;
+                    }
+                    
+                    // 移除旧模型
+                    if (this.model) {
+                        this.app.stage.removeChild(this.model);
+                        this.model.destroy();
+                    }
+                    
+                    this.modelData = modelData;
+                    
+                    // 尝试加载Live2D模型
+                    if (typeof PIXI !== 'undefined' && PIXI.live2d) {
+                        // 使用Live2D Cubism SDK
+                        this.model = await PIXI.live2d.Live2DModel.from(modelPath);
+                        
+                        // 添加到舞台
+                        this.app.stage.addChild(this.model);
+
+                        // 等待一帧后进行初始化，确保模型完全加载
+                        await new Promise(resolve => requestAnimationFrame(resolve));
+                        
+                        // 确保模型可见
+                        this.model.visible = true;
+                        this.model.alpha = 1.0;
+                        
+                        // 设置模型自适应位置与缩放（使用更大的边距）
+                        this.fitModelToView({ mode: 'contain', margin: 50, alignX: 0.5, alignY: 0.5 });
+                        
+                        // 强制渲染一次
+                        this.app.renderer.render(this.app.stage);
+                        
+                        // 启用交互
+                        this.model.interactive = true;
+                        this.model.on('pointerdown', () => {
+                            // 如果有当前选中的动作，播放选中的动作；否则播放随机动作
+                            if (this.currentMotion) {
+                                try { 
+                                    this.playMotion(this.currentMotion); 
+                                } catch (e) { 
+                                    console.warn('播放选中动作失败:', e); 
+                                }
+                            } else {
+                                const groups = this.getMotionGroups();
+                                if (groups.length > 0) {
+                                    const group = groups[Math.floor(Math.random() * groups.length)];
+                                    try { 
+                                        this.model.motion(group);
+                                        document.getElementById('motion-info').textContent = `Motion: ${group} (random)`;
+                                    } catch (e) { 
+                                        console.warn('随机动作失败:', e); 
+                                    }
+                                } else {
+                                    console.warn('无可用动作分组');
+                                }
+                            }
+                        });
+                        
+                    } else {
+                        throw new Error('Live2D library not loaded');
+                    }
+                    
+                    // 更新UI
+                    const name = (modelPath || '').split(/[\\\/]/).pop();
+                    document.getElementById('model-info').textContent = `Model: ${name || 'Unknown'}`;
+                    
+                    // 延迟重新适配，确保模型完全初始化（使用更大的边距）
+                    setTimeout(() => {
+                        this.fitModelToView({ mode: 'contain', margin: 50, alignX: 0.5, alignY: 0.5 });
+                        this.app.renderer.render(this.app.stage);
+                    }, 100);
+                    
+                    // 再次延迟适配，确保在高 DPI 显示器上也能正确居中
+                    setTimeout(() => {
+                        this.fitModelToView({ mode: 'contain', margin: 50, alignX: 0.5, alignY: 0.5 });
+                    }, 300);
+                    
+                    this.sendMessage('modelLoaded', { path: modelPath });
+                    // 更新控制面板选项（表达与动作）
+                    this.updateControlsFromModel();
+                    
+                } catch (error) {
+                    console.error('模型加载失败:', error);
+                    this.showError('Model loading failed: ' + error.message);
+                    this.sendMessage('modelLoadError', { path: modelPath, error: error.message });
+                }
+            }
+
+            // 自适应模型到视口：根据可用区域自动缩放并居中
+            fitModelToView(options = {}) {
+                if (!this.app || !this.model) {
+                    console.warn('Cannot fit model to view: app or model not available');
+                    return;
+                }
+
+                try {
+                    const mode = options.mode || 'contain'; // 'contain' 或 'cover'
+                    const margin = options.margin ?? 50;  // 增加边距避免模型贴边
+                    const alignX = options.alignX ?? 0.5;   // 0.0 左, 0.5 中, 1.0 右
+                    const alignY = options.alignY ?? 0.5;   // 0.0 上, 0.5 中, 1.0 下
+
+                    // 使用实际的CSS像素尺寸
+                    const stageW = this.canvasWidth;
+                    const stageH = this.canvasHeight;
+                    const availW = Math.max(100, stageW - margin * 2);
+                    const availH = Math.max(100, stageH - margin * 2);
+
+                    console.log(`Stage size: ${stageW}x${stageH}, Available: ${availW}x${availH}`);
+
+                    // 获取模型本地边界（不受父级缩放影响）
+                    const localBounds = this.model.getLocalBounds();
+                    const w0 = Math.max(1, localBounds.width);
+                    const h0 = Math.max(1, localBounds.height);
+                    
+                    console.log(`Model bounds: ${w0}x${h0}, position: (${localBounds.x}, ${localBounds.y})`);
+
+                    // 计算缩放比例，确保模型完全可见
+                    let scale = mode === 'cover'
+                        ? Math.max(availW / w0, availH / h0)
+                        : Math.min(availW / w0, availH / h0);
+                    
+                    // 确保缩放比例合理且偏保守（宁可小一点也要确保居中）
+                    scale = Math.max(0.1, Math.min(scale * 0.9, 5));  // 乘以 0.9 留出更多空间
+
+                    this.model.scale.set(scale);
+                    
+                    // 将锚点设置到模型边界的中心
+                    this.model.pivot.set(localBounds.x + w0 / 2, localBounds.y + h0 / 2);
+                    
+                    // 将模型定位到舞台中心（或根据对齐参数定位）
+                    const posX = margin + availW * alignX;
+                    const posY = margin + availH * alignY;
+                    
+                    this.model.position.set(posX, posY);
+                    
+                    console.log(`Model fitted: scale=${scale.toFixed(3)}, pivot=(${this.model.pivot.x.toFixed(1)}, ${this.model.pivot.y.toFixed(1)}), position=(${posX.toFixed(1)}, ${posY.toFixed(1)})`);
+                    
+                    // 强制渲染一帧
+                    this.app.renderer.render(this.app.stage);
+                    
+                } catch (error) {
+                    console.warn('Error fitting model to view:', error);
+                }
+            }
+            
+            setExpression(expression) {
+                this.currentExpression = expression;
+                
+                if (this.model && this.model.internalModel && this.model.internalModel.coreModel) {
+                    // 真实Live2D模型
+                    try {
+                        this.model.expression(expression);
+                    } catch (error) {
+                        console.warn('设置表情失败:', error);
+                    }
+                }
+                
+                document.getElementById('expression-info').textContent = `Expression: ${expression}`;
+                this.sendMessage('expressionChanged', { expression: expression });
+            }
+            
+            playMotion(motionData) {
+                // 支持两种调用方式：直接传动作组名字符串，或传包含motion和index的对象
+                let motion, index = 0;
+                
+                if (typeof motionData === 'string') {
+                    motion = motionData;
+                } else if (typeof motionData === 'object' && motionData.motion) {
+                    motion = motionData.motion;
+                    index = motionData.index || 0;
+                } else {
+                    console.warn('Invalid motion data:', motionData);
+                    return;
+                }
+                
+                this.currentMotion = motion;
+
+                if (!this.model || !this.model.internalModel || !this.model.internalModel.coreModel) {
+                    document.getElementById('motion-info').textContent = `Motion: No available motions`;
+                    this.sendMessage('motionPlayed', { motion: motion, ok: false, groups: [] });
+                    return;
+                }
+
+                try {
+                    const groups = this.getMotionGroups();
+                    const requested = String(motion || '').trim();
+                    let group = requested;
+
+                    // 如果组名不存在，尝试回退策略
+                    if (!groups.includes(group)) {
+                        console.warn(`Motion group "${group}" not found. Available groups:`, groups);
+                        
+                        // 尝试常见的动作组名
+                        const commonGroups = ['idle', 'Idle', 'IDLE', 'tap_body', 'Tap', 'TapBody', 'tap'];
+                        const fallbackGroup = commonGroups.find(g => groups.includes(g));
+                        
+                        if (fallbackGroup) {
+                            group = fallbackGroup;
+                            console.log(`Using fallback group: ${group}`);
+                        } else if (groups.length > 0) {
+                            group = groups[0];
+                            console.log(`Using first available group: ${group}`);
+                        } else {
+                            document.getElementById('motion-info').textContent = `Motion: No available motions`;
+                            this.sendMessage('motionPlayed', { motion: requested, ok: false, groups });
+                            return;
+                        }
+                    }
+
+                    // 播放动作 - 使用动作组名和索引
+                    if (typeof index === 'number' && index >= 0) {
+                        // 如果提供了索引，尝试播放特定索引的动作
+                        this.model.motion(group, index);
+                    } else {
+                        // 否则播放组中的随机动作
+                        this.model.motion(group);
+                    }
+                    
+                    document.getElementById('motion-info').textContent = `Motion: ${group}${index !== undefined ? ` [${index}]` : ''}`;
+                    this.sendMessage('motionPlayed', { 
+                        motion: group, 
+                        index: index,
+                        ok: true, 
+                        groups, 
+                        original: requested 
+                    });
+                    
+                } catch (error) {
+                    console.warn('Failed to play motion:', error);
+                    document.getElementById('motion-info').textContent = `Motion: Failed(${motion})`;
+                    this.sendMessage('motionPlayed', { motion, ok: false, error: error.message });
+                }
+            }
+            
+            showError(message) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('canvas').style.display = 'none';
+                document.getElementById('info').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error-message').textContent = message;
+            }
+            
+            sendMessage(type, data) {
+                // 通过控制台输出消息，Python端可以监听
+                console.log(JSON.stringify({ type: type, data: data }));
+            }
+
+            getMotionGroups() {
+                const settings = this.model && this.model.internalModel ? this.model.internalModel.settings : null;
+                const motions = settings && settings.motions ? settings.motions : null;
+                return motions ? Object.keys(motions) : [];
+            }
+            
+            setCanvasOpacity(opacity) {
+                if (this.model) {
+                    this.model.alpha = Math.max(0, Math.min(1, opacity));
+                    this.sendMessage('canvasOpacityChanged', { opacity: this.model.alpha });
+                }
+            }
+            
+            setRotationAngle(angle) {
+                if (this.model) {
+                    // 将角度转换为弧度
+                    this.model.rotation = (angle * Math.PI) / 180;
+                    this.sendMessage('rotationAngleChanged', { angle: angle });
+                }
+            }
+            
+            setBackground(transparent, color) {
+                if (transparent) {
+                    // 设置透明背景
+                    this.background.clear();
+                    this.app.renderer.backgroundColor = 0x000000;
+                    this.app.renderer.backgroundAlpha = 0;
+                } else {
+                    // 设置彩色背景
+                    const colorValue = color ? parseInt(color.replace('#', ''), 16) : 0xffffff;
+                    this.background.clear();
+                    this.background.beginFill(colorValue, 1);
+                    this.background.drawRect(0, 0, this.canvasWidth, this.canvasHeight);
+                    this.background.endFill();
+                    this.app.renderer.backgroundColor = colorValue;
+                    this.app.renderer.backgroundAlpha = 1;
+                }
+                this.sendMessage('backgroundChanged', { transparent: transparent, color: color });
+            }
+            
+            setResolution(width, height, auto) {
+                if (!this.app) return;
+                
+                try {
+                    if (auto) {
+                        // 自动适应容器大小
+                        this.updateCanvasSize();
+                    } else {
+                        // 设置固定分辨率
+                        const canvas = this.app.view;
+                        const targetWidth = Math.max(100, width || 800);
+                        const targetHeight = Math.max(100, height || 600);
+                        
+                        // 保存实际的CSS像素尺寸
+                        this.canvasWidth = targetWidth;
+                        this.canvasHeight = targetHeight;
+                        
+                        // 更新渲染器尺寸
+                        this.app.renderer.resize(targetWidth, targetHeight);
+                        
+                        // 更新canvas样式尺寸以保持清晰度
+                        canvas.style.width = targetWidth + 'px';
+                        canvas.style.height = targetHeight + 'px';
+                        
+                        // 重绘背景
+                        this.drawBackground();
+                        
+                        // 重新适配模型
+                        this.fitModelToView();
+                        
+                        this.sendMessage('resolutionChanged', { 
+                            width: targetWidth, 
+                            height: targetHeight, 
+                            auto: false 
+                        });
+                    }
+                } catch (error) {
+                    console.warn('Failed to set resolution:', error);
+                    this.sendMessage('resolutionChanged', { 
+                        error: error.message, 
+                        width: width, 
+                        height: height, 
+                        auto: auto 
+                    });
+                }
+            }
+            
+            clearModel() {
+                try {
+                    // 移除当前模型
+                    if (this.model) {
+                        this.app.stage.removeChild(this.model);
+                        this.model.destroy();
+                        this.model = null;
+                    }
+                    
+                    // 清理模型数据
+                    this.modelData = null;
+                    this.currentExpression = null;
+                    this.currentMotion = null;
+                    
+                    // 重置UI信息
+                    document.getElementById('model-info').textContent = 'Model: Not loaded';
+                    document.getElementById('expression-info').textContent = 'Expression: None';
+                    document.getElementById('motion-info').textContent = 'Motion: None';
+                    
+                    // 显示占位符文字
+                    this.showPlaceholder();
+                    
+                    // 通知Python端
+                    this.sendMessage('modelCleared', {});
+                    
+                } catch (error) {
+                    console.warn('Failed to clear model:', error);
+                    this.sendMessage('modelClearError', { error: error.message });
+                }
+            }
+            
+            showPlaceholder() {
+                // 添加占位符文字
+                if (!this.placeholderText && this.app) {
+                    this.placeholderText = new PIXI.Text('Drag & Drop Live2D Model Here\nor\nSelect Model Folder', {
+                        fontFamily: 'Arial',
+                        fontSize: 24,
+                        fill: 0xffffff,
+                        align: 'center'
+                    });
+                    this.placeholderText.anchor.set(0.5);
+                    this.placeholderText.x = this.canvasWidth / 2;
+                    this.placeholderText.y = this.canvasHeight / 2;
+                    this.app.stage.addChild(this.placeholderText);
+                }
+            }
+            
+            toggleInfoPanel(force) {
+                const infoEl = document.getElementById('info');
+                const toggleBtn = document.getElementById('toggle-info');
+                
+                if (typeof force === 'boolean') {
+                    this.infoVisible = force;
+                } else {
+                    this.infoVisible = !this.infoVisible;
+                }
+                
+                if (this.infoVisible) {
+                    infoEl.style.display = 'block';
+                    if (toggleBtn) toggleBtn.textContent = 'Hide Panel [H]';
+                } else {
+                    infoEl.style.display = 'none';
+                    if (toggleBtn) toggleBtn.textContent = 'Show Panel [H]';
+                }
+            }
+
+            // 控制面板交互与事件绑定
+            setupControls() {
+                const exprSelect = document.getElementById('expression-select');
+                const motionList = document.getElementById('motion-list');
+                const opacitySlider = document.getElementById('opacity-slider');
+                const opacityLabel = document.getElementById('opacity-label');
+                const rotationSlider = document.getElementById('rotation-slider');
+                const rotationLabel = document.getElementById('rotation-label');
+                const resSelect = document.getElementById('resolution-select');
+                const customRes = document.getElementById('custom-res');
+                const widthInput = document.getElementById('width-input');
+                const heightInput = document.getElementById('height-input');
+                const applyRes = document.getElementById('apply-res');
+                const bgTransparent = document.getElementById('bg-transparent');
+                const bgColor = document.getElementById('bg-color');
+                const clearBtn = document.getElementById('clear-model');
+
+                // 表情切换
+                if (exprSelect) {
+                    exprSelect.addEventListener('change', () => {
+                        const expr = exprSelect.value || '';
+                        this.setExpression(expr);
+                    });
+                }
+
+                // 动作播放
+                if (motionList) {
+                    motionList.addEventListener('click', (ev) => {
+                        const li = ev.target.closest('li');
+                        if (!li) return;
+                        const group = li.getAttribute('data-group');
+                        const indexAttr = li.getAttribute('data-index');
+                        const index = indexAttr ? parseInt(indexAttr, 10) : undefined;
+                        if (group) this.playMotion(index !== undefined ? { motion: group, index } : group);
+                    });
+                }
+
+                // 透明度
+                if (opacitySlider && opacityLabel) {
+                    const updateOpacity = () => {
+                        const val = Math.max(0, Math.min(100, parseInt(opacitySlider.value, 10) || 0));
+                        opacityLabel.textContent = `${val}%`;
+                        this.setCanvasOpacity(val / 100);
+                    };
+                    opacitySlider.addEventListener('input', updateOpacity);
+                    updateOpacity();
+                }
+
+                // 旋转角度
+                if (rotationSlider && rotationLabel) {
+                    const updateRotation = () => {
+                        const val = Math.max(-180, Math.min(180, parseInt(rotationSlider.value, 10) || 0));
+                        rotationLabel.textContent = `${val}°`;
+                        this.setRotationAngle(val);
+                    };
+                    rotationSlider.addEventListener('input', updateRotation);
+                    updateRotation();
+                }
+
+                // 分辨率选择
+                if (resSelect) {
+                    resSelect.addEventListener('change', () => {
+                        const val = resSelect.value;
+                        if (val === 'auto') {
+                            customRes.style.display = 'none';
+                            this.setResolution(undefined, undefined, true);
+                        } else if (val === 'custom') {
+                            customRes.style.display = 'flex';
+                        } else {
+                            customRes.style.display = 'none';
+                            const [w, h] = val.split('x').map(v => parseInt(v, 10));
+                            this.setResolution(w, h, false);
+                        }
+                    });
+                }
+                if (applyRes) {
+                    applyRes.addEventListener('click', () => {
+                        const w = parseInt(widthInput.value, 10) || 800;
+                        const h = parseInt(heightInput.value, 10) || 600;
+                        this.setResolution(w, h, false);
+                    });
+                }
+
+                // 背景设置
+                if (bgTransparent) {
+                    const applyBackground = () => {
+                        const transparent = bgTransparent.checked;
+                        const color = bgColor ? bgColor.value : '#ffffff';
+                        this.setBackground(transparent, color);
+                    };
+                    bgTransparent.addEventListener('change', applyBackground);
+                    if (bgColor) bgColor.addEventListener('input', applyBackground);
+                    applyBackground();
+                }
+
+                // 清除模型
+                if (clearBtn) {
+                    clearBtn.addEventListener('click', () => this.clearModel());
+                }
+            }
+
+            // 从模型数据或JSON填充表达与动作列表
+            async updateControlsFromModel() {
+                try {
+                    let data = this.modelData;
+                    if (!data && this.modelPath) {
+                        try {
+                            const resp = await fetch(this.modelPath);
+                            data = await resp.json();
+                        } catch (e) {
+                            console.warn('无法获取模型JSON以填充控制面板:', e);
+                        }
+                    }
+
+                    // 表情列表
+                    const exprSelect = document.getElementById('expression-select');
+                    if (exprSelect) {
+                        // 清空并追加默认项
+                        exprSelect.innerHTML = '<option value="">None</option>';
+                        const expressions = data && data.FileReferences && Array.isArray(data.FileReferences.Expressions)
+                            ? data.FileReferences.Expressions
+                            : [];
+                        expressions.forEach(item => {
+                            const name = item && (item.Name || item.name || item.Id || item.id) || '';
+                            if (name) {
+                                const opt = document.createElement('option');
+                                opt.value = name;
+                                opt.textContent = name;
+                                exprSelect.appendChild(opt);
+                            }
+                        });
+                    }
+
+                    // 动作列表（按组显示）
+                    const motionList = document.getElementById('motion-list');
+                    if (motionList) {
+                        motionList.innerHTML = '';
+                        const motions = data && data.FileReferences && data.FileReferences.Motions
+                            ? data.FileReferences.Motions
+                            : null;
+                        const groups = motions ? Object.keys(motions) : this.getMotionGroups();
+                        groups.forEach(group => {
+                            const li = document.createElement('li');
+                            li.textContent = group;
+                            li.setAttribute('data-group', group);
+                            motionList.appendChild(li);
+                        });
+                    }
+                } catch (err) {
+                    console.warn('填充控制面板失败:', err);
+                }
+            }
+        }
+        
+        // 初始化预览器
+        window.addEventListener('load', () => {
+            window.live2dPreview = new Live2DPreview();
+        });
+    </script>
+</body>
+</html>
