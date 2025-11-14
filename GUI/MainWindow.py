@@ -84,20 +84,24 @@ class MainWindow(FluentWindow):
             print(f"Error creating EncryptionPage: {e}")
             self.encryptionPage = QFrame(self)
             self.encryptionPage.setObjectName('encryptionPage')
-            try:
-                self.steamWorkshopPage = SteamWorkshopPage(self)
-            except Exception as e:
-                print(f"Error creating SteamWorkshopPage: {e}")
-                self.steamWorkshopPage = QFrame(self)
-                self.steamWorkshopPage.setObjectName('steamWorkshopPage')
+
+        try:
+            self.steamWorkshopPage = SteamWorkshopPage(self)
         except Exception as e:
-            print(f"Error adding SteamWorkshopPage to navigation: {e}")
+            print(f"Error creating SteamWorkshopPage: {e}")
+            self.steamWorkshopPage = QFrame(self)
+            self.steamWorkshopPage.setObjectName('steamWorkshopPage')
             
         try:
             self.addSubInterface(self.extractorPage, FIF.ZIP_FOLDER, 'LPK Extractor')
         except Exception as e:
             print(f"Error adding ExtractorPage to navigation: {e}")
-            
+
+        try:
+            self.addSubInterface(self.steamWorkshopPage, FIF.GAME, 'Steam Workshop')
+        except Exception as e:
+            print(f"Error adding SteamWorkshopPage to navigation: {e}")
+
         try:
             self.addSubInterface(self.previewPage, FIF.MOVIE, 'Live2D Preview')
         except Exception as e:
@@ -110,6 +114,8 @@ class MainWindow(FluentWindow):
                               NavigationItemPosition.SCROLL)
         except Exception as e:
             print(f"Error adding EncryptionPage to navigation: {e}")
+        
+        # Steam Workshop already added to top navigation above
             
     def eventFilter(self, obj, event):
         # 监听窗口大小变化事件，调整字体和控件大小
@@ -139,7 +145,7 @@ class MainWindow(FluentWindow):
         font.setPointSize(font_size)
         app.setFont(font)
         
-        # 确保子页面知道字体已更新
-        for page in [self.extractorPage, self.previewPage, self.encryptionPage, self.steamWorkshopPage]:
+        pages = [self.extractorPage, self.previewPage, self.encryptionPage, getattr(self, 'steamWorkshopPage', None)]
+        for page in filter(None, pages):
             if hasattr(page, 'updateUIScale'):
                 page.updateUIScale(self.width(), self.height())

@@ -1,0 +1,8 @@
+venv/
+settings.json
+build/
+__pycache__/
+.vscode
+
+start.bat
+output

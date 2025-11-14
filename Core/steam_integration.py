@@ -46,22 +46,58 @@ class SteamIntegration:
         return None
     
     def get_workshop_path(self, steam_path: str = None) -> Optional[str]:
-        """Get workshop path for the game"""
         if steam_path is None:
             steam_path = self.steam_path or self.find_steam_installation()
-            
         if not steam_path:
             return None
-            
-        workshop_path = os.path.join(steam_path, "steamapps", "workshop", "content", self.game_id)
-        
-        if os.path.exists(workshop_path):
-            self.workshop_path = workshop_path
-            logger.info(f"Found workshop path: {workshop_path}")
-            return workshop_path
-        else:
-            logger.warning(f"Workshop path not found: {workshop_path}")
-            return None
+
+        primary = os.path.join(steam_path, "steamapps", "workshop", "content", self.game_id)
+        if os.path.exists(primary):
+            self.workshop_path = primary
+            logger.info(f"Found workshop path: {primary}")
+            return primary
+
+        for lib in self._get_library_paths(steam_path):
+            candidate = os.path.join(lib, "workshop", "content", self.game_id)
+            if os.path.exists(candidate):
+                self.workshop_path = candidate
+                logger.info(f"Found workshop path: {candidate}")
+                return candidate
+
+        shared = os.path.join(steam_path, "steamapps", "common", "Live2DViewerEX", "shared", "workshop")
+        if os.path.exists(shared):
+            self.workshop_path = shared
+            logger.info(f"Found workshop path: {shared}")
+            return shared
+
+        logger.warning(f"Workshop path not found: {primary}")
+        return None
+
+    def _get_library_paths(self, steam_path: str) -> List[str]:
+        libs = []
+        vdf = os.path.join(steam_path, "steamapps", "libraryfolders.vdf")
+        if not os.path.exists(vdf):
+            return libs
+        try:
+            with open(vdf, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+            for line in content.splitlines():
+                line = line.strip()
+                if '"path"' in line:
+                    parts = line.split('"')
+                    if len(parts) >= 4:
+                        p = parts[3]
+                        if os.path.exists(p):
+                            libs.append(os.path.join(p, "steamapps"))
+                else:
+                    tokens = line.split('"')
+                    if len(tokens) >= 3 and tokens[1].isdigit():
+                        p = tokens[2].strip()
+                        if p and os.path.exists(p):
+                            libs.append(os.path.join(p, "steamapps"))
+        except Exception:
+            pass
+        return libs
     
     def scan_workshop_items(self, workshop_path: str = None) -> List[Dict]:
         """Scan workshop directory for LPK files"""
@@ -144,7 +180,8 @@ class SteamIntegration:
             if os.path.exists(desc_path):
                 try:
                     with open(desc_path, 'r', encoding='utf-8', errors='ignore') as f:
-                        info['description'] = f.read()[:200] + '...' if len(f.read()) > 200 else f.read()
+                        content = f.read()
+                        info['description'] = (content[:200] + '...') if len(content) > 200 else content
                         break
                 except Exception:
                     pass
