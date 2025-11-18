@@ -92,6 +92,24 @@ class MainWindow(FluentWindow):
             self.steamWorkshopPage = QFrame(self)
             self.steamWorkshopPage.setObjectName('steamWorkshopPage')
             
+        self.initWindow()
+        self.initNavigation()
+        
+        # Set theme
+        setTheme(Theme.AUTO)
+        
+        # 为整个应用设置字体
+        self.updateFontSize()
+        
+        # 安装事件过滤器以处理缩放
+        self.installEventFilter(self)
+        
+    def initWindow(self):
+        self.resize(1000, 700)  # 稍微增大初始窗口尺寸
+        self.setWindowTitle('LPK Unpacker GUI')
+        
+    def initNavigation(self):
+        # Add sub-interfaces to navigation
         try:
             self.addSubInterface(self.extractorPage, FIF.ZIP_FOLDER, 'LPK Extractor')
         except Exception as e:
