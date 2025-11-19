@@ -31,7 +31,7 @@ class WebPreviewPage(QFrame):
         
         # 描述
         self.desc_label = QLabel(
-            "Preview Live2D models in browser without Qt WebEngine dependency.",
+            "Display Live2D models in the browser via local proxy.",
             self
         )
         self.desc_label.setWordWrap(True)
