@@ -1,6 +1,5 @@
 PyQt-Fluent-Widgets>=1.4.0
 PyQt5>=5.15.0
-PyQtWebEngine>=5.15.0
 filetype>=1.0.0
 live2d-py>=0.5.4
 numpy>=1.21.0
@@ -8,3 +7,5 @@ pyopengl>=3.1.0
 nuitka>=2.8.4
 fastapi>=0.115.0
 uvicorn>=0.30.0
+websockets>=12.0
+requests>=2.31.0

@@ -18,6 +18,21 @@ set "SCRIPT_DIR=%~dp0"
 set "RUN_PY="
 set "RUN_PY_IS_CMD=0"
 set "DESC="
+set "CONSOLE_MODE=disable"
+
+REM Enable console when DEBUG=1 for troubleshooting black screen
+if /I "%DEBUG%"=="1" (
+    set "CONSOLE_MODE=attach"
+    set "QT_DEBUG_PLUGINS=1"
+)
+
+REM Prefer currently active Conda environment if available
+if defined CONDA_PREFIX (
+    set "RUN_PY=python"
+    set "RUN_PY_IS_CMD=0"
+    set "DESC=Active Conda env '%CONDA_DEFAULT_ENV%'"
+    goto SELECTED
+)
 
 REM Try local venv first
 set "VENV_PY=%SCRIPT_DIR%%ENV_NAME%\Scripts\python.exe"
@@ -29,11 +44,25 @@ if exist "%VENV_PY%" (
 )
 
 REM Try Conda env if available
-where conda >nul 2>&1
-if %ERRORLEVEL%==0 (
-    conda run -n %ENV_NAME% python -V >nul 2>&1
+set "CONDA_CMD="
+if defined CONDA_EXE (
+    set "CONDA_CMD=%CONDA_EXE%"
+) else (
+    where conda >nul 2>&1
     if %ERRORLEVEL%==0 (
-        set "RUN_PY=conda run -n %ENV_NAME% python"
+        set "CONDA_CMD=conda"
+    ) else (
+        where conda.bat >nul 2>&1
+        if %ERRORLEVEL%==0 (
+            set "CONDA_CMD=conda.bat"
+        )
+    )
+)
+
+if defined CONDA_CMD (
+    %CONDA_CMD% run --no-capture-output -n %ENV_NAME% python -V >nul 2>&1
+    if %ERRORLEVEL%==0 (
+        set "RUN_PY=%CONDA_CMD% run --no-capture-output -n %ENV_NAME% python"
         set "RUN_PY_IS_CMD=1"
         set "DESC=Conda env '%ENV_NAME%'"
         goto SELECTED
@@ -71,10 +100,25 @@ if %ERRORLEVEL% neq 0 (
     echo Error: Nuitka not found in the selected environment.
     echo Please install Nuitka:
     echo - Conda:   conda install -n %ENV_NAME% -c conda-forge nuitka
-    echo - venv:    %ENV_NAME%\\Scripts\\pip install nuitka
+    echo - venv:    %ENV_NAME%\Scripts\pip install nuitka
     echo - global:  pip install nuitka
     pause
     exit /b 1
+)
+
+REM Ensure websockets and requests are installed (as per runtime requirements)
+if "%RUN_PY_IS_CMD%"=="0" (
+    "%RUN_PY%" -c "import websockets, requests" >nul 2>&1
+) else (
+    %RUN_PY% -c "import websockets, requests" >nul 2>&1
+)
+if %ERRORLEVEL% neq 0 (
+    echo Missing packages detected. Installing: websockets, requests
+    if "%RUN_PY_IS_CMD%"=="0" (
+        "%RUN_PY%" -m pip install websockets requests
+    ) else (
+        %RUN_PY% -m pip install websockets requests
+    )
 )
 
 echo Compiling application with Nuitka using %DESC%...
@@ -85,13 +129,14 @@ if "%RUN_PY_IS_CMD%"=="0" (
     "%RUN_PY%" -m nuitka --onefile ^
         --enable-plugin=pyqt5 ^
         --output-dir=build ^
-        --windows-console-mode=disable ^
+        --windows-console-mode=%CONSOLE_MODE% ^
         --jobs=%NUMBER_OF_PROCESSORS% ^
         --lto=no ^
+        --show-progress ^
         --include-data-dir=./GUI/assets=GUI/assets ^
         --include-data-dir=./Img=Img ^
         --windows-icon-from-ico=Img/icon.ico ^
-        --nofollow-import-to=matplotlib,scipy,pandas,tkinter,PyQtWebEngine,PyQt5.QtWebEngineWidgets,PyQt5.QtWebEngineCore ^
+        --nofollow-import-to=matplotlib,scipy,pandas,tkinter ^
         --python-flag=no_site ^
         --python-flag=no_docstrings ^
         LpkUnpackerGUI.py
@@ -99,13 +144,14 @@ if "%RUN_PY_IS_CMD%"=="0" (
     %RUN_PY% -m nuitka --onefile ^
         --enable-plugin=pyqt5 ^
         --output-dir=build ^
-        --windows-console-mode=disable ^
+        --windows-console-mode=%CONSOLE_MODE% ^
         --jobs=%NUMBER_OF_PROCESSORS% ^
         --lto=no ^
+        --show-progress ^
         --include-data-dir=./GUI/assets=GUI/assets ^
         --include-data-dir=./Img=Img ^
         --windows-icon-from-ico=Img/icon.ico ^
-        --nofollow-import-to=matplotlib,scipy,pandas,tkinter,PyQtWebEngine,PyQt5.QtWebEngineWidgets,PyQt5.QtWebEngineCore ^
+        --nofollow-import-to=matplotlib,scipy,pandas,tkinter ^
         --python-flag=no_site ^
         --python-flag=no_docstrings ^
         LpkUnpackerGUI.py

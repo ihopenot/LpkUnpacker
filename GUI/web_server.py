@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 import uuid
 from typing import Dict, Set
 
@@ -44,6 +45,15 @@ assets_dir = _resolve_assets_dir()
 
 app = FastAPI(title="LpkUnpacker Web Proxy")
 
+# 添加CORS中间件支持跨域请求
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 允许所有来源（本地开发）
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Mount static files at /static so relative paths in index.html (../vender/...) resolve to /static/vender/...
 app.mount("/static", StaticFiles(directory=str(assets_dir), html=True), name="static")
 
@@ -52,6 +62,13 @@ app.mount("/static", StaticFiles(directory=str(assets_dir), html=True), name="st
 def root():
     # Redirect to the Live2D web page with embedded controls
     return RedirectResponse(url="/static/live2d/web.html")
+
+
+@app.get("/favicon.ico")
+async def favicon():
+    """返回404避免favicon请求错误日志"""
+    from fastapi.responses import Response
+    return Response(status_code=404)
 
 
 def _find_free_port(host: str = "127.0.0.1") -> int:
@@ -76,12 +93,13 @@ def start_server(host: str = "127.0.0.1", port: int = 0) -> int:
     actual_port = port or _find_free_port(host)
 
     # Minimal logging config that relies only on stdlib logging.Formatter
+    # 使用标准的 logging 字段避免 KeyError
     simple_log_config = {
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {
             "default": {"format": "%(levelname)s %(name)s: %(message)s"},
-            "access": {"format": "%(levelname)s %(client_addr)s - \"%(request_line)s\" %(status_code)s"},
+            "access": {"format": "%(levelname)s %(message)s"},
         },
         "handlers": {
             "console": {"class": "logging.StreamHandler", "formatter": "default"},
@@ -103,8 +121,14 @@ def start_server(host: str = "127.0.0.1", port: int = 0) -> int:
     )
     server = uvicorn.Server(config)
 
+    # 启动服务器线程
     t = threading.Thread(target=server.run, daemon=True)
     t.start()
+    
+    # 等待一小段时间确保服务器完全启动
+    import time
+    time.sleep(0.8)
+    
     return actual_port
 
 
@@ -115,7 +139,7 @@ _mounted_models: Dict[str, Path] = {}
 def mount_model_dir(dir_path: str) -> str:
     """Mount a local directory under a unique URL prefix and return the base path.
 
-    Example return: "/model/06a1b7e0" so a file "model.json" becomes "/model/06a1b7e0/model.json".
+    Example return: "/model/abcde" so a file "model.json" becomes "/model/abcde/model.json".
 
     This allows loading a selected Live2D folder via HTTP, so the web UI can
     fetch JSON and related textures relative to the same base path.
