@@ -56,32 +56,32 @@ except Exception as e:
             self.setObjectName('encryptionPage')
             QHBoxLayout(self).addWidget(QFrame(self))
 
+
+# Try import SteamWorkshopPage with fallback
 try:
     from GUI.SteamWorkshopPage import SteamWorkshopPage
 except Exception as e:
     import traceback
     print(f"Error importing SteamWorkshopPage: {e}")
     traceback.print_exc()
-    # Create a dummy page
     class SteamWorkshopPage(QFrame):
         def __init__(self, parent=None):
             super().__init__(parent)
             self.setObjectName('steamWorkshopPage')
             QHBoxLayout(self).addWidget(QFrame(self))
 
+# Try import WebPreviewPage with fallback
 try:
     from GUI.WebPreviewPage import WebPreviewPage
 except Exception as e:
     import traceback
     print(f"Error importing WebPreviewPage: {e}")
     traceback.print_exc()
-    # Create a dummy page
     class WebPreviewPage(QFrame):
         def __init__(self, parent=None):
             super().__init__(parent)
             self.setObjectName('webPreviewPage')
             QHBoxLayout(self).addWidget(QFrame(self))
-
 
 class MainWindow(FluentWindow):
     """ Main Window with Navigation """
@@ -114,14 +114,14 @@ class MainWindow(FluentWindow):
             print(f"Error creating EncryptionPage: {e}")
             self.encryptionPage = QFrame(self)
             self.encryptionPage.setObjectName('encryptionPage')
-            
+        
         try:
             self.steamWorkshopPage = SteamWorkshopPage(self)
         except Exception as e:
             print(f"Error creating SteamWorkshopPage: {e}")
             self.steamWorkshopPage = QFrame(self)
             self.steamWorkshopPage.setObjectName('steamWorkshopPage')
-            
+        
         try:
             self.webPreviewPage = WebPreviewPage(self)
         except Exception as e:
@@ -151,7 +151,12 @@ class MainWindow(FluentWindow):
             self.addSubInterface(self.extractorPage, FIF.ZIP_FOLDER, 'LPK Extractor')
         except Exception as e:
             print(f"Error adding ExtractorPage to navigation: {e}")
-            
+
+        try:
+            self.addSubInterface(self.steamWorkshopPage, FIF.GAME, 'Steam Workshop')
+        except Exception as e:
+            print(f"Error adding SteamWorkshopPage to navigation: {e}")
+
         try:
             self.addSubInterface(self.steamWorkshopPage, FIF.GAME, 'Steam Workshop')
         except Exception as e:
@@ -176,6 +181,8 @@ class MainWindow(FluentWindow):
                               NavigationItemPosition.SCROLL)
         except Exception as e:
             print(f"Error adding EncryptionPage to navigation: {e}")
+        
+        # Steam Workshop already added to top navigation above
             
     def eventFilter(self, obj, event):
         # 监听窗口大小变化事件，调整字体和控件大小
@@ -205,8 +212,14 @@ class MainWindow(FluentWindow):
         font.setPointSize(font_size)
         app.setFont(font)
         
-        # 通知所有页面更新UI缩放
-        for page in [self.extractorPage, self.previewPage, self.encryptionPage, self.steamWorkshopPage]:
+        pages = [
+            self.extractorPage,
+            self.previewPage,
+            self.encryptionPage,
+            getattr(self, 'steamWorkshopPage', None),
+            getattr(self, 'webPreviewPage', None)
+        ]
+        for page in filter(None, pages):
             if hasattr(page, 'updateUIScale'):
                 page.updateUIScale(self.width(), self.height())
     

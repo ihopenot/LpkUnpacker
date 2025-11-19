@@ -9,6 +9,8 @@ QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, T
 QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
 QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
 
+QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+
 def run_application():
     # 创建QApplication实例
     app = QApplication(sys.argv)
