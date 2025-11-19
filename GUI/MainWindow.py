@@ -156,11 +156,6 @@ class MainWindow(FluentWindow):
             self.addSubInterface(self.steamWorkshopPage, FIF.GAME, 'Steam Workshop')
         except Exception as e:
             print(f"Error adding SteamWorkshopPage to navigation: {e}")
-
-        try:
-            self.addSubInterface(self.steamWorkshopPage, FIF.GAME, 'Steam Workshop')
-        except Exception as e:
-            print(f"Error adding SteamWorkshopPage to navigation: {e}")
             
         try:
             # Only add native preview tab when not disabled
