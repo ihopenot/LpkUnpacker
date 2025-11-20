@@ -50,8 +50,10 @@ python -m nuitka --onefile ^
     --windows-console-mode=disable ^
     --include-data-dir=./Img=Img ^
     --include-package=qfluentwidgets,filetype,live2d,numpy ^
+    --include-qt-plugins=webview ^
     --windows-icon-from-ico=Img/icon.ico ^
     --nofollow-import-to=matplotlib,scipy,pandas,tkinter ^
+    --assume-yes-for-downloads ^
     --python-flag=no_site ^
     --python-flag=no_docstrings ^
     --remove-output ^

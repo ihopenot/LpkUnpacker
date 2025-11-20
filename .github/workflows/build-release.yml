@@ -3,8 +3,8 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*'
-  workflow_dispatch:
+      - 'v*'  # Trigger when pushing tags like v1.0.0
+  workflow_dispatch:  # Allow manual trigger
 
 jobs:
   build:
@@ -19,6 +19,14 @@ jobs:
       with:
         python-version: '3.10'
         cache: 'pip'
+    
+    - name: Install system dependencies
+      run: |
+        # Install Visual C++ build tools components if needed
+        Write-Host "Python version:"
+        python --version
+        Write-Host "Pip version:"
+        pip --version
     
     - name: Install dependencies
       run: |
@@ -42,7 +50,7 @@ jobs:
           --windows-console-mode=disable `
           --include-data-dir=./Img=Img `
           --include-package=qfluentwidgets,filetype,live2d,numpy `
-          --include-qt-plugins=webengine `
+          --include-qt-plugins=webview `
           --windows-icon-from-ico=Img/icon.ico `
           --nofollow-import-to=matplotlib,scipy,pandas,tkinter `
           --assume-yes-for-downloads `
@@ -79,8 +87,7 @@ jobs:
         ### Features
         - LPK/WPK file extraction
         - Image extraction with deduplication
-        - Live2D model support
-        - Steam integration
+        - Live2D model mod tool
         - Multi-language support (EN/ZH)
         "@
         $notes | Out-File -FilePath RELEASE_NOTES.md -Encoding UTF8
