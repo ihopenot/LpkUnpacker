@@ -44,7 +44,8 @@ jobs:
     
     - name: Build executable with Nuitka
       run: |
-        compile.bat
+        .\compile.bat
+      shell: cmd
       
     - name: Verify build output
       run: |
