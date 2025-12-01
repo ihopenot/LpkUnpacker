@@ -65,6 +65,8 @@ if "%RUN_PY_IS_CMD%"=="0" (
         --nofollow-import-to=matplotlib,scipy,pandas,tkinter ^
         --python-flag=no_site ^
         --python-flag=no_docstrings ^
+        --assume-yes-for-downloads ^
+        --remove-output
         LpkUnpackerGUI.py
 )
 
