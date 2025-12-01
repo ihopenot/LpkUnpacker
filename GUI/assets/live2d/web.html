@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live2D Previewer</title>
+    
+    <!-- Live2D Cubism Core & Runtime -->
+    <script src="../vender/live2dcubismcore.min.js"></script>
+    <script src="../vender/live2d.min.js"></script>
+    <script src="../vender/pixi.min.js"></script>
+    <script>window.PIXI = PIXI;</script>
+    <script src="../vender/index.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --primary-color: #667eea;
+            --secondary-color: #764ba2;
+            --accent-color: #ffd93d;
+            --bg-dark: rgba(0, 0, 0, 0.85);
+            --bg-medium: rgba(0, 0, 0, 0.65);
+            --bg-light: rgba(255, 255, 255, 0.1);
+            --border-radius: 12px;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+        }
+        
+        /* 顶部导航栏 */
+        #navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: var(--bg-dark);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            z-index: 1000;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        #navbar .logo {
+            font-size: 20px;
+            font-weight: bold;
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            -webkit-background-clip: text;
+            -moz-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-right: 40px;
+        }
+        
+        #navbar .nav-items {
+            display: flex;
+            gap: 8px;
+            flex: 1;
+        }
+        
+        .nav-btn {
+            padding: 8px 20px;
+            background: transparent;
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            cursor: pointer;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: var(--transition);
+        }
+        
+        .nav-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+        
+        .nav-btn.active {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: #fff;
+        }
+        
+        /* 主容器 */
+        #app-container {
+            position: absolute;
+            top: 60px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+        }
+        
+        /* 画布区域 */
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-width: 0;
+            overflow: hidden;
+        }
+        
+        #canvas {
+            border-radius: var(--border-radius);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+            background: var(--bg-light);
+            width: 100% !important;
+            height: 100% !important;
+            max-width: 100%;
+            max-height: 100%;
+            display: block;
+        }
+        
+        /* 侧边控制面板 */
+        #sidebar {
+            width: 360px;
+            background: var(--bg-dark);
+            backdrop-filter: blur(20px);
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        
+        #sidebar::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        #sidebar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+        
+        #sidebar::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        /* 面板卡片 */
+        .panel-card {
+            background: var(--bg-medium);
+            border-radius: var(--border-radius);
+            padding: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        .panel-card.collapsed .panel-body {
+            display: none;
+        }
+        
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .panel-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--accent-color);
+        }
+        
+        .panel-toggle {
+            font-size: 18px;
+            transition: var(--transition);
+        }
+        
+        .panel-card.collapsed .panel-toggle {
+            transform: rotate(-90deg);
+        }
+        
+        .panel-body {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        /* 控制组 */
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .control-label {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.8);
+            font-weight: 500;
+        }
+        
+        .control-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        
+        /* 输入控件 */
+        input[type="range"] {
+            flex: 1;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+        
+        input[type="number"],
+        input[type="text"],
+        select {
+            padding: 8px 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 13px;
+            outline: none;
+            transition: var(--transition);
+        }
+        
+        input[type="number"]:focus,
+        input[type="text"]:focus,
+        select:focus {
+            border-color: var(--accent-color);
+            background: rgba(0, 0, 0, 0.5);
+        }
+        
+        select {
+            cursor: pointer;
+        }
+        
+        input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        
+        input[type="color"] {
+            width: 50px;
+            height: 32px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        
+        /* 按钮 */
+        .btn {
+            padding: 10px 16px;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a6f);
+        }
+        
+        /* 列表 */
+        .list-container {
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 4px;
+        }
+        
+        .list-item {
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            margin-bottom: 4px;
+            cursor: pointer;
+            transition: var(--transition);
+            font-size: 13px;
+        }
+        
+        .list-item:hover {
+            background: rgba(255, 255, 255, 0.15);
+            transform: translateX(4px);
+        }
+        
+        .list-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        /* 状态标签 */
+        .value-badge {
+            min-width: 50px;
+            padding: 4px 8px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 6px;
+            font-size: 12px;
+            text-align: center;
+            font-weight: 500;
+        }
+        
+        /* 加载动画 */
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-top-color: var(--accent-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            margin-top: 20px;
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.8);
+        }
+        
+        /* 错误提示 */
+        #error-overlay {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--bg-dark);
+            padding: 30px;
+            border-radius: var(--border-radius);
+            max-width: 400px;
+            text-align: center;
+            z-index: 9999;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+        
+        .error-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        
+        .error-title {
+            font-size: 20px;
+            margin-bottom: 12px;
+            color: #ff6b6b;
+        }
+        
+        .error-message {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+            line-height: 1.5;
+        }
+        
+        /* 页面视图 */
+        .view {
+            display: none;
+        }
+        
+        .view.active {
+            display: flex;
+            flex: 1;
+            min-width: 0;
+        }
+        
+        /* 设置页面 */
+        #settings-view {
+            padding: 40px;
+            overflow-y: auto;
+            flex-direction: column;
+            gap: 24px;
+            max-width: 900px;
+            margin: 0 auto;
+            width: 100%;
+        }
+        
+        .settings-section {
+            background: var(--bg-medium);
+            border-radius: var(--border-radius);
+            padding: 24px;
+        }
+        
+        .settings-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: var(--accent-color);
+        }
+        
+        .settings-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .settings-row:last-child {
+            border-bottom: none;
+        }
+        
+        .settings-label {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.9);
+        }
+        
+        .settings-desc {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 4px;
+        }
+        
+        .settings-control {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        
+        /* 代理设置页面 */
+        .proxy-status {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .proxy-status.connected {
+            background: rgba(76, 175, 80, 0.2);
+            color: #4caf50;
+        }
+        
+        .proxy-status.disconnected {
+            background: rgba(244, 67, 54, 0.2);
+            color: #f44336;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 1200px) {
+            #sidebar {
+                width: 300px;
+            }
+        }
+        
+        @media (max-width: 900px) {
+            #sidebar {
+                position: fixed;
+                right: -360px;
+                top: 60px;
+                bottom: 0;
+                width: 360px;
+                transition: var(--transition);
+                z-index: 999;
+            }
+            
+            #sidebar.open {
+                right: 0;
+                box-shadow: -4px 0 20px rgba(0, 0, 0, 0.5);
+            }
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部导航 -->
+    <nav id="navbar">
+        <div class="logo" data-i18n="app.title">🎭 Live2D Previewer</div>
+        <div class="nav-items">
+            <button class="nav-btn active" data-view="preview" data-i18n="navbar.preview">Preview</button>
+            <button class="nav-btn" data-view="settings" data-i18n="navbar.settings">Settings</button>
+            <button class="nav-btn" data-view="proxy" data-i18n="navbar.proxy">Proxy</button>
+        </div>
+    </nav>
+    
+    <!-- 主容器 -->
+    <div id="app-container">
+        <!-- 预览视图 -->
+        <div id="preview-view" class="view active">
+            <div id="canvas-container">
+                <canvas id="canvas"></canvas>
+            </div>
+            
+            <!-- 侧边控制面板 -->
+            <div id="sidebar">
+                <!-- 模型信息面板 -->
+                <div class="panel-card">
+                    <div class="panel-header" onclick="togglePanel(this)">
+                        <div class="panel-title" data-i18n="panel.modelInfo">📋 Model Info</div>
+                        <span class="panel-toggle">▼</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="control-group">
+                            <div class="control-label" data-i18n="model.name">Model Name</div>
+                            <div id="model-name" style="font-size: 13px; color: rgba(255,255,255,0.7);" data-i18n="model.notLoaded">Not Loaded</div>
+                        </div>
+                        <div class="control-group">
+                            <div class="control-label" data-i18n="current.expression">Current Expression</div>
+                            <div id="current-expression" style="font-size: 13px; color: rgba(255,255,255,0.7);" data-i18n="none">None</div>
+                        </div>
+                        <div class="control-group">
+                            <div class="control-label" data-i18n="current.motion">Current Motion</div>
+                            <div id="current-motion" style="font-size: 13px; color: rgba(255,255,255,0.7);" data-i18n="none">None</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 模型控制面板 -->
+                <div class="panel-card">
+                    <div class="panel-header" onclick="togglePanel(this)">
+                        <div class="panel-title" data-i18n="controls.model">🎮 Model Controls</div>
+                        <span class="panel-toggle">▼</span>
+                    </div>
+                    <div class="panel-body">
+                        <!-- XY位置 -->
+                        <div class="control-group">
+                            <div class="control-label" data-i18n="position.x">X Position</div>
+                            <div class="control-row">
+                                <input type="range" id="pos-x-slider" min="-500" max="500" value="0" />
+                                <span class="value-badge" id="pos-x-value">0</span>
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <div class="control-label" data-i18n="position.y">Y Position</div>
+                            <div class="control-row">
+                                <input type="range" id="pos-y-slider" min="-500" max="500" value="0" />
+                                <span class="value-badge" id="pos-y-value">0</span>
+                            </div>
+                        </div>
+                        
+                        <!-- 缩放 -->
+                        <div class="control-group">
+                            <div class="control-label" data-i18n="scale">Scale</div>
+                            <div class="control-row">
+                                <input type="range" id="scale-slider" min="10" max="300" value="100" />
+                                <span class="value-badge" id="scale-value">100%</span>
+                            </div>
+                        </div>
+                        
+                        <!-- 旋转 -->
+                        <div class="control-group">
+                            <div class="control-label" data-i18n="rotation">Rotation</div>
+                            <div class="control-row">
+                                <input type="range" id="rotation-slider" min="-180" max="180" value="0" />
+                                <span class="value-badge" id="rotation-value">0°</span>
+                            </div>
+                        </div>
+                        
+                        <!-- 透明度 -->
+                        <div class="control-group">
+                            <div class="control-label" data-i18n="opacity">Opacity</div>
+                            <div class="control-row">
+                                <input type="range" id="opacity-slider" min="0" max="100" value="100" />
+                                <span class="value-badge" id="opacity-value">100%</span>
+                            </div>
+                        </div>
+                        
+                        <!-- 快速操作 -->
+                        <div class="control-row" style="margin-top: 8px;">
+                            <button class="btn btn-sm" style="flex:1;" onclick="resetModelTransform()" data-i18n="quick.resetTransform">Reset Transform</button>
+                            <button class="btn btn-sm" style="flex:1;" onclick="autoFitModel()" data-i18n="quick.autoFit">Auto Fit</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 表情控制 -->
+                <div class="panel-card">
+                    <div class="panel-header" onclick="togglePanel(this)">
+                        <div class="panel-title" data-i18n="expression.panel">😊 Expressions</div>
+                        <span class="panel-toggle">▼</span>
+                    </div>
+                    <div class="panel-body">
+                        <select id="expression-select" style="width: 100%;">
+                            <option value="" data-i18n="expression.none">No Expression</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- 动作控制 -->
+                <div class="panel-card">
+                    <div class="panel-header" onclick="togglePanel(this)">
+                        <div class="panel-title" data-i18n="motion.panel">💃 Motions</div>
+                        <span class="panel-toggle">▼</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="list-container" id="motion-list">
+                            <div style="padding: 20px; text-align: center; color: rgba(255,255,255,0.5); font-size: 13px;" data-i18n="motion.none">No Motions</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 画布设置 -->
+                <div class="panel-card">
+                    <div class="panel-header" onclick="togglePanel(this)">
+                        <div class="panel-title" data-i18n="canvas.settings">🖼️ Canvas Settings</div>
+                        <span class="panel-toggle">▼</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="control-group">
+                            <div class="control-label" data-i18n="resolution">Resolution</div>
+                            <select id="resolution-select" style="width: 100%;">
+                                <option value="auto" data-i18n="auto">Auto</option>
+                                <option value="800x600">800 × 600</option>
+                                <option value="1024x768">1024 × 768</option>
+                                <option value="1280x720">1280 × 720 (HD)</option>
+                                <option value="1920x1080">1920 × 1080 (Full HD)</option>
+                                <option value="2560x1440">2560 × 1440 (2K)</option>
+                                <option value="3840x2160">3840 × 2160 (4K)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="control-group">
+                            <div class="control-label" data-i18n="background">Background</div>
+                            <div class="control-row">
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" id="bg-transparent" checked />
+                                    <span style="font-size: 13px;" data-i18n="transparent">Transparent</span>
+                                </label>
+                                <input type="color" id="bg-color" value="#667eea" />
+                            </div>
+                        </div>
+                        
+                        <button class="btn btn-danger" style="width: 100%;" onclick="clearModel()" data-i18n="clearModel">Clear Model</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 设置视图 -->
+        <div id="settings-view" class="view">
+            <div class="settings-section">
+                <div class="settings-title" data-i18n="settings.display">⚙️ Display Settings</div>
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-label" data-i18n="settings.autoFitLabel">Auto Fit Model</div>
+                        <div class="settings-desc" data-i18n="settings.autoFitDesc">Automatically adjust size and position when loading</div>
+                    </div>
+                    <div class="settings-control">
+                        <input type="checkbox" id="setting-auto-fit" checked />
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-label" data-i18n="settings.showInfoLabel">Show Model Info</div>
+                        <div class="settings-desc" data-i18n="settings.showInfoDesc">Display model name and status on canvas</div>
+                    </div>
+                    <div class="settings-control">
+                        <input type="checkbox" id="setting-show-info" checked />
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-label" data-i18n="settings.defaultBgLabel">Default Background</div>
+                        <div class="settings-desc" data-i18n="settings.defaultBgDesc">Default background for canvas</div>
+                    </div>
+                    <div class="settings-control">
+                        <select id="setting-default-bg">
+                            <option value="transparent" data-i18n="bg.transparent">Transparent</option>
+                            <option value="gradient" data-i18n="bg.gradient">Gradient</option>
+                            <option value="solid" data-i18n="bg.solid">Solid</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <div class="settings-title" data-i18n="settings.performance">🎨 Performance Settings</div>
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-label" data-i18n="settings.qualityLabel">Rendering Quality</div>
+                        <div class="settings-desc" data-i18n="settings.qualityDesc">Higher quality requires more performance</div>
+                    </div>
+                    <div class="settings-control">
+                        <select id="setting-quality">
+                            <option value="low" data-i18n="quality.low">Low</option>
+                            <option value="medium" data-i18n="quality.medium">Medium</option>
+                            <option value="high" selected data-i18n="quality.high">High</option>
+                            <option value="ultra" data-i18n="quality.ultra">Ultra</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-label" data-i18n="settings.antialiasLabel">Antialiasing</div>
+                        <div class="settings-desc" data-i18n="settings.antialiasDesc">Smooth edges, improved visuals</div>
+                    </div>
+                    <div class="settings-control">
+                        <input type="checkbox" id="setting-antialias" checked />
+                    </div>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <div class="settings-title" data-i18n="settings.advanced">🔧 Advanced Settings</div>
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-label" data-i18n="settings.debugLabel">Enable Debug Mode</div>
+                        <div class="settings-desc" data-i18n="settings.debugDesc">Show detailed logs in console</div>
+                    </div>
+                    <div class="settings-control">
+                        <input type="checkbox" id="setting-debug" />
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-label" data-i18n="settings.wsReconnectLabel">WebSocket Reconnect</div>
+                        <div class="settings-desc" data-i18n="settings.wsReconnectDesc">Automatically reconnect to local server</div>
+                    </div>
+                    <div class="settings-control">
+                        <input type="checkbox" id="setting-ws-reconnect" checked />
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-label" data-i18n="settings.languageLabel">Language</div>
+                        <div class="settings-desc" data-i18n="settings.languageDesc">UI language</div>
+                    </div>
+                    <div class="settings-control">
+                        <select id="setting-language">
+                            <option value="en">English</option>
+                            <option value="zh">简体中文</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 代理设置视图 -->
+        <div id="proxy-view" class="view">
+            <div class="settings-section">
+                <div class="settings-title" data-i18n="proxy.server">🌐 Proxy Server</div>
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-label" data-i18n="proxy.statusLabel">Server Status</div>
+                        <div class="settings-desc" data-i18n="proxy.statusDesc">Local proxy server status</div>
+                    </div>
+                    <div class="settings-control">
+                        <span class="proxy-status" id="proxy-status" data-i18n="status.checking">Checking...</span>
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-label" data-i18n="proxy.urlLabel">Server Address</div>
+                        <div class="settings-desc" data-i18n="proxy.urlDesc">Current proxy server address</div>
+                    </div>
+                    <div class="settings-control">
+                        <span id="proxy-url" style="font-size: 13px; color: rgba(255,255,255,0.7);">-</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <div class="settings-title" data-i18n="ws.section">📡 WebSocket Connection</div>
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-label" data-i18n="ws.statusLabel">Connection Status</div>
+                        <div class="settings-desc" data-i18n="ws.statusDesc">Realtime communication with main app</div>
+                    </div>
+                    <div class="settings-control">
+                        <span class="proxy-status" id="ws-status" data-i18n="ws.disconnected">Disconnected</span>
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-label">WebSocket URL</div>
+                        <div class="settings-desc" data-i18n="ws.urlDesc">Realtime communication address</div>
+                    </div>
+                    <div class="settings-control">
+                        <span id="ws-url" style="font-size: 13px; color: rgba(255,255,255,0.7);">-</span>
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <button class="btn" onclick="reconnectWebSocket()" style="width: 100%;" data-i18n="ws.reconnect">Reconnect</button>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <div class="settings-title" data-i18n="help.title">📝 Instructions</div>
+                <div style="font-size: 13px; line-height: 1.8; color: rgba(255,255,255,0.7);">
+                    <p style="margin-bottom: 12px;" data-i18n="help.localProxy">
+                        <strong>Local proxy mode</strong> allows accessing the Live2D previewer in a browser without Qt WebEngine.
+                    </p>
+                    <p style="margin-bottom: 12px;">
+                        • <span data-i18n="help.b1">Automatically connects to local server</span><br/>
+                        • <span data-i18n="help.b2">Supports loading models synced from main app</span><br/>
+                    </p>
+                    <p style="margin-bottom: 12px;" data-i18n="help.recommended">
+                        <strong>Recommended browsers:</strong> latest Chrome, Edge, Firefox
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 加载动画 -->
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <div class="loading-text" data-i18n="loading.initializing">Initializing Live2D Previewer...</div>
+    </div>
+    
+    <!-- 错误提示 -->
+    <div id="error-overlay" class="hidden">
+        <div class="error-icon">❌</div>
+        <div class="error-title" data-i18n="error.title">Load Failed</div>
+        <div class="error-message" id="error-message"></div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
