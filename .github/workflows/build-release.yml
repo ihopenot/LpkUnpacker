@@ -44,20 +44,7 @@ jobs:
     
     - name: Build executable with Nuitka
       run: |
-        python -m nuitka --onefile `
-          --enable-plugin=pyqt5 `
-          --output-dir=build `
-          --windows-console-mode=disable `
-          --include-data-dir=./Img=Img `
-          --include-package=qfluentwidgets,filetype,live2d,numpy `
-          --include-qt-plugins=webview `
-          --windows-icon-from-ico=Img/icon.ico `
-          --nofollow-import-to=matplotlib,scipy,pandas,tkinter `
-          --assume-yes-for-downloads `
-          --python-flag=no_site `
-          --python-flag=no_docstrings `
-          --remove-output `
-          LpkUnpackerGUI.py
+        compile.bat
       
     - name: Verify build output
       run: |
@@ -85,10 +72,7 @@ jobs:
         **Build Date:** $buildDate
         
         ### Features
-        - LPK/WPK file extraction
-        - Image extraction with deduplication
-        - Live2D model mod tool
-        - Multi-language support (EN/ZH)
+        - ...
         "@
         $notes | Out-File -FilePath RELEASE_NOTES.md -Encoding UTF8
     
@@ -100,7 +84,7 @@ jobs:
         bodyFile: RELEASE_NOTES.md
         artifacts: build/LpkUnpackerGUI.exe
         artifactContentType: application/octet-stream
-        draft: false
+        draft: true
         prerelease: false
         token: ${{ secrets.GITHUB_TOKEN }}
     
