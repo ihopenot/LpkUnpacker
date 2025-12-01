@@ -66,7 +66,7 @@ if "%RUN_PY_IS_CMD%"=="0" (
         --python-flag=no_site ^
         --python-flag=no_docstrings ^
         --assume-yes-for-downloads ^
-        --remove-output
+        --remove-output ^
         LpkUnpackerGUI.py
 )
 
