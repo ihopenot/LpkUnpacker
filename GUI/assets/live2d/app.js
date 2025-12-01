@@ -10,6 +10,10 @@ class Live2DApp {
         this.ws = null;
         this.wsReconnectTimer = null;
         
+        // Canvas 尺寸
+        this.canvasWidth = 0;
+        this.canvasHeight = 0;
+        
         // 模型变换状态
         this.transform = {
             x: 0,
@@ -83,17 +87,17 @@ class Live2DApp {
         const canvas = document.getElementById('canvas');
         const container = document.getElementById('canvas-container');
         
-        // 计算画布尺寸
-        const width = Math.max(400, Math.floor(container.clientWidth * 0.9));
-        const height = Math.max(300, Math.floor(container.clientHeight * 0.9));
-        
-        this.log(`初始化画布: ${width}x${height}`);
+        // 计算画布尺寸并保存
+        this.canvasWidth = Math.max(400, Math.floor(container.clientWidth * 0.9));
+        this.canvasHeight = Math.max(300, Math.floor(container.clientHeight * 0.9));
+
+        this.log(`初始化画布: ${this.canvasWidth}x${this.canvasHeight}`);
         
         // 创建 PIXI 应用
         this.app = new PIXI.Application({
             view: canvas,
-            width: width,
-            height: height,
+            width: this.canvasWidth,
+            height: this.canvasHeight,
             backgroundColor: 0x667eea,
             backgroundAlpha: 0.1,
             resolution: window.devicePixelRatio || 1,
@@ -122,8 +126,8 @@ class Live2DApp {
             dropShadowDistance: 2
         });
         this.placeholderText.anchor.set(0.5);
-        this.placeholderText.x = width / 2;
-        this.placeholderText.y = height / 2;
+        this.placeholderText.x = this.canvasWidth / 2;
+        this.placeholderText.y = this.canvasHeight / 2;
         this.app.stage.addChild(this.placeholderText);
         
         // 监听窗口大小变化
@@ -133,16 +137,13 @@ class Live2DApp {
     drawBackground() {
         if (!this.background || !this.app) return;
         
-        const width = this.app.renderer.width;
-        const height = this.app.renderer.height;
-        
         this.background.clear();
         
         if (this.settings.defaultBg === 'transparent') {
             this.app.renderer.backgroundAlpha = 0;
         } else {
             this.background.beginFill(0x667eea, 0.1);
-            this.background.drawRect(0, 0, width, height);
+            this.background.drawRect(0, 0, this.canvasWidth, this.canvasHeight);
             this.background.endFill();
             this.app.renderer.backgroundAlpha = 1;
         }
@@ -152,15 +153,16 @@ class Live2DApp {
         if (!this.app) return;
         
         const container = document.getElementById('canvas-container');
-        const width = Math.max(400, Math.floor(container.clientWidth * 0.9));
-        const height = Math.max(300, Math.floor(container.clientHeight * 0.9));
+        // 重新计算并保存尺寸
+        this.canvasWidth = Math.max(400, Math.floor(container.clientWidth * 0.9));
+        this.canvasHeight = Math.max(300, Math.floor(container.clientHeight * 0.9));
         
-        this.app.renderer.resize(width, height);
+        this.app.renderer.resize(this.canvasWidth, this.canvasHeight);
         this.drawBackground();
         
         if (this.placeholderText) {
-            this.placeholderText.x = width / 2;
-            this.placeholderText.y = height / 2;
+            this.placeholderText.x = this.canvasWidth / 2;
+            this.placeholderText.y = this.canvasHeight / 2;
         }
         
         if (this.model && this.settings.autoFit) {
@@ -563,11 +565,9 @@ class Live2DApp {
         }
         
         try {
-            const width = this.app.renderer.width;
-            const height = this.app.renderer.height;
             const margin = 50;
-            const availW = Math.max(100, width - margin * 2);
-            const availH = Math.max(100, height - margin * 2);
+            const availW = Math.max(100, this.canvasWidth - margin * 2);
+            const availH = Math.max(100, this.canvasHeight - margin * 2);
             
             // 获取模型边界
             const bounds = this.model.getLocalBounds();
@@ -611,17 +611,14 @@ class Live2DApp {
     updateModelTransform() {
         if (!this.model || !this.app) return;
         
-        const width = this.app.renderer.width;
-        const height = this.app.renderer.height;
-        
         // 应用缩放（基准缩放 × 用户缩放）
         const finalScale = this.transform.baseScale * this.transform.scale;
         this.model.scale.set(finalScale);
         
         // 应用位置（中心 + 偏移）
         this.model.position.set(
-            width / 2 + this.transform.x,
-            height / 2 + this.transform.y
+            this.canvasWidth / 2 + this.transform.x,
+            this.canvasHeight / 2 + this.transform.y
         );
         
         // 应用旋转
@@ -731,16 +728,23 @@ class Live2DApp {
                 this.handleResize();
             } else {
                 const [w, h] = value.split('x').map(v => parseInt(v, 10));
-                this.app.renderer.resize(w, h);
-                this.drawBackground();
-                
-                if (this.placeholderText) {
-                    this.placeholderText.x = w / 2;
-                    this.placeholderText.y = h / 2;
-                }
-                
-                if (this.model && this.settings.autoFit) {
-                    this.autoFitModel();
+                // 验证并保存新尺寸
+                if (!isNaN(w) && !isNaN(h) && w > 0 && h > 0) {
+                    this.canvasWidth = w;
+                    this.canvasHeight = h;
+                    this.app.renderer.resize(w, h);
+                    this.drawBackground();
+                    
+                    if (this.placeholderText) {
+                        this.placeholderText.x = this.canvasWidth / 2;
+                        this.placeholderText.y = this.canvasHeight / 2;
+                    }
+                    
+                    if (this.model && this.settings.autoFit) {
+                        this.autoFitModel();
+                    }
+                } else {
+                    throw new Error('Invalid resolution values');
                 }
             }
             
@@ -763,11 +767,9 @@ class Live2DApp {
             this.app.renderer.backgroundAlpha = 0;
         } else {
             const colorValue = parseInt(color.replace('#', ''), 16);
-            const width = this.app.renderer.width;
-            const height = this.app.renderer.height;
             
             this.background.beginFill(colorValue, 1);
-            this.background.drawRect(0, 0, width, height);
+            this.background.drawRect(0, 0, this.canvasWidth, this.canvasHeight);
             this.background.endFill();
             this.app.renderer.backgroundColor = colorValue;
             this.app.renderer.backgroundAlpha = 1;
@@ -810,9 +812,6 @@ class Live2DApp {
             
             // 显示占位符
             if (!this.placeholderText) {
-                const width = this.app.renderer.width;
-                const height = this.app.renderer.height;
-                
                 this.placeholderText = new PIXI.Text(this.t('placeholder.noModel'), {
                     fontFamily: 'Arial, sans-serif',
                     fontSize: 24,
@@ -824,8 +823,8 @@ class Live2DApp {
                     dropShadowDistance: 2
                 });
                 this.placeholderText.anchor.set(0.5);
-                this.placeholderText.x = width / 2;
-                this.placeholderText.y = height / 2;
+                this.placeholderText.x = this.canvasWidth / 2;
+                this.placeholderText.y = this.canvasHeight / 2;
                 this.app.stage.addChild(this.placeholderText);
             }
             
