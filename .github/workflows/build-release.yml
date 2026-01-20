@@ -49,12 +49,22 @@ jobs:
       
     - name: Verify build output
       run: |
-        if (-Not (Test-Path "build/LpkUnpackerGUI.exe")) {
-          Write-Error "Build failed: LpkUnpackerGUI.exe not found"
+        if (-Not (Test-Path "build/LpkUnpackerGUI.dist")) {
+          Write-Error "Build failed: LpkUnpackerGUI.dist directory not found"
           exit 1
         }
-        $fileSize = (Get-Item "build/LpkUnpackerGUI.exe").Length / 1MB
-        Write-Host "Build successful! File size: $fileSize MB"
+        Write-Host "Build successful!"
+        Write-Host "Build output directory contents:"
+        Get-ChildItem "build/LpkUnpackerGUI.dist" -Recurse | Select-Object FullName, Length
+    
+    - name: Package build output
+      run: |
+        $version = "${{ github.ref }}" -replace 'refs/tags/', ''
+        $zipName = "LpkUnpacker-$version-windows-x64.zip"
+        Compress-Archive -Path "build/LpkUnpackerGUI.dist/*" -DestinationPath $zipName -CompressionLevel Optimal
+        Write-Host "Created package: $zipName"
+        $zipSize = (Get-Item $zipName).Length / 1MB
+        Write-Host "Package size: $([math]::Round($zipSize, 2)) MB"
     
     - name: Get version from tag
       id: get_version
@@ -83,8 +93,8 @@ jobs:
         tag: ${{ steps.get_version.outputs.VERSION }}
         name: Release ${{ steps.get_version.outputs.VERSION }}
         bodyFile: RELEASE_NOTES.md
-        artifacts: build/LpkUnpackerGUI.exe
-        artifactContentType: application/octet-stream
+        artifacts: LpkUnpacker-*.zip
+        artifactContentType: application/zip
         draft: true
         prerelease: false
         token: ${{ secrets.GITHUB_TOKEN }}
