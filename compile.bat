@@ -52,7 +52,7 @@ echo This may take several minutes. Please be patient...
 
 REM Main compilation command
 if "%RUN_PY_IS_CMD%"=="0" (
-    %RUN_PY% -m nuitka --onefile ^
+    %RUN_PY% -m nuitka --standalone ^
         --enable-plugin=pyqt5 ^
         --output-dir=build ^
         --windows-console-mode=%CONSOLE_MODE% ^
