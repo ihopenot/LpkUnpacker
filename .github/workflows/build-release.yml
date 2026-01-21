@@ -59,7 +59,12 @@ jobs:
     
     - name: Package build output
       run: |
-        $version = "${{ github.ref }}" -replace 'refs/tags/', ''
+        # Get version from tag or use commit SHA for manual runs
+        if ("${{ github.ref }}" -match '^refs/tags/(.+)$') {
+          $version = $matches[1]
+        } else {
+          $version = "${{ github.sha }}".Substring(0, 7)
+        }
         $zipName = "LpkUnpacker-$version-windows-x64.zip"
         Compress-Archive -Path "build/LpkUnpackerGUI.dist/*" -DestinationPath $zipName -CompressionLevel Optimal
         Write-Host "Created package: $zipName"
@@ -69,8 +74,13 @@ jobs:
     - name: Get version from tag
       id: get_version
       run: |
-        $tag = "${{ github.ref }}" -replace 'refs/tags/', ''
-        echo "VERSION=$tag" >> $env:GITHUB_OUTPUT
+        # Get version from tag or use commit SHA for manual runs
+        if ("${{ github.ref }}" -match '^refs/tags/(.+)$') {
+          $version = $matches[1]
+        } else {
+          $version = "${{ github.sha }}".Substring(0, 7)
+        }
+        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
     
     - name: Prepare Release Notes
       id: release_notes
@@ -88,6 +98,8 @@ jobs:
         $notes | Out-File -FilePath RELEASE_NOTES.md -Encoding UTF8
     
     - name: Create Release
+      # Only create release for tag pushes, not manual workflow runs
+      if: startsWith(github.ref, 'refs/tags/')
       uses: ncipollo/release-action@v1
       with:
         tag: ${{ steps.get_version.outputs.VERSION }}
