@@ -2,6 +2,7 @@ from __future__ import unicode_literals
 from typing import Tuple
 import zipfile
 import json
+from typing import List
 from Core.utils import *
 import logging
 import os
@@ -122,13 +123,13 @@ class LpkLoader():
             logger.debug(f"{name} -> {val}")
             # extract submodel
             if (name.lower().endswith("_command") or name.lower().endswith("_postcommand")) and val:
-                commands = val.split(";")
+                commands:List[str] = val.split(";")
                 for cmd in commands:
                     enc_file = find_encrypted_file(cmd)
                     if enc_file == None:
                         continue
 
-                    if cmd.startswith("change_cos"):
+                    if cmd.startswith("change_cos") or cmd.startswith("change_model"):
                         enc_file = find_encrypted_file(cmd)
                         self.extract_model_json(enc_file, dir)
                     else:

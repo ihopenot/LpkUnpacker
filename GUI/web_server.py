@@ -92,32 +92,11 @@ def start_server(host: str = "127.0.0.1", port: int = 0) -> int:
 
     actual_port = port or _find_free_port(host)
 
-    # Minimal logging config that relies only on stdlib logging.Formatter
-    # 使用标准的 logging 字段避免 KeyError
-    simple_log_config = {
-        "version": 1,
-        "disable_existing_loggers": False,
-        "formatters": {
-            "default": {"format": "%(levelname)s %(name)s: %(message)s"},
-            "access": {"format": "%(levelname)s %(message)s"},
-        },
-        "handlers": {
-            "console": {"class": "logging.StreamHandler", "formatter": "default"},
-            "access": {"class": "logging.StreamHandler", "formatter": "access"},
-        },
-        "loggers": {
-            "uvicorn": {"handlers": ["console"], "level": "INFO"},
-            "uvicorn.error": {"handlers": ["console"], "level": "INFO"},
-            "uvicorn.access": {"handlers": ["access"], "level": "INFO"},
-        },
-    }
-
     config = uvicorn.Config(
         app,
         host=host,
         port=actual_port,
         log_level="info",
-        log_config=simple_log_config,
     )
     server = uvicorn.Server(config)
 
