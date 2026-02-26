@@ -129,7 +129,7 @@ class LpkLoader():
                     if enc_file == None:
                         continue
 
-                    if cmd.startswith("change_cos") or cmd.startswith("change_model"):
+                    if self.is_model_command(cmd):
                         enc_file = find_encrypted_file(cmd)
                         self.extract_model_json(enc_file, dir)
                     else:
@@ -153,6 +153,12 @@ class LpkLoader():
         
         logger.debug(f"========= end of model {model_json} =========")
 
+    def is_model_command(self, cmd: str):
+        model_commands = ["change_cos", "change_model", "add_submodel", "remove_submodel"]
+        for model_cmd in model_commands:
+            if cmd.startswith(model_cmd):
+                return True
+        return False
 
     def check_decrypt(self, filename):
         '''
