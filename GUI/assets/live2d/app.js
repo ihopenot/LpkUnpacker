@@ -64,6 +64,10 @@ class Live2DApp {
             
             // 从 localStorage 加载设置
             this.loadSettings();
+            const urlLang = this.getLanguageFromUrl();
+            if (urlLang) {
+                this.settings.language = urlLang;
+            }
 
             await this.loadLanguage(this.settings.language || 'en');
             this.applyTranslations();
@@ -264,7 +268,7 @@ class Live2DApp {
         const langSelect = document.getElementById('setting-language');
         if (langSelect) {
             langSelect.addEventListener('change', async (e) => {
-                this.settings.language = e.target.value;
+                this.settings.language = this.normalizeLanguage(e.target.value);
                 this.saveSettings();
                 await this.loadLanguage(this.settings.language);
                 this.applyTranslations();
@@ -503,7 +507,7 @@ class Live2DApp {
     async updateModelInfo() {
         // 更新模型名称
         const name = (this.modelPath || '').split(/[\\\/]/).pop();
-        document.getElementById('model-name').textContent = name || '未知';
+        document.getElementById('model-name').textContent = name || this.t('model.notLoaded');
         
         // 获取模型数据
         let data = this.modelData;
@@ -520,7 +524,7 @@ class Live2DApp {
         // 更新表情列表
         const exprSelect = document.getElementById('expression-select');
         if (exprSelect) {
-            exprSelect.innerHTML = '<option value="">无表情</option>';
+            exprSelect.innerHTML = `<option value="">${this.t('expression.none')}</option>`;
             
             const expressions = data && data.FileReferences && Array.isArray(data.FileReferences.Expressions)
                 ? data.FileReferences.Expressions
@@ -545,7 +549,7 @@ class Live2DApp {
             const groups = this.getMotionGroups();
             
             if (groups.length === 0) {
-                motionList.innerHTML = '<div style="padding: 20px; text-align: center; color: rgba(255,255,255,0.5); font-size: 13px;">暂无动作</div>';
+                motionList.innerHTML = `<div style="padding: 20px; text-align: center; color: rgba(255,255,255,0.5); font-size: 13px;">${this.t('motion.none')}</div>`;
             } else {
                 groups.forEach(group => {
                     const item = document.createElement('div');
@@ -640,7 +644,7 @@ class Live2DApp {
         try {
             this.model.expression(expression);
             this.currentExpression = expression;
-            document.getElementById('current-expression').textContent = expression || '无';
+            document.getElementById('current-expression').textContent = expression || this.t('none');
             this.log('✅ 表情已设置:', expression);
         } catch (error) {
             this.log('❌ 设置表情失败:', error);
@@ -804,11 +808,11 @@ class Live2DApp {
             };
             
             // 重置UI
-            document.getElementById('model-name').textContent = '未加载';
-            document.getElementById('current-expression').textContent = '无';
-            document.getElementById('current-motion').textContent = '无';
-            document.getElementById('expression-select').innerHTML = '<option value="">无表情</option>';
-            document.getElementById('motion-list').innerHTML = '<div style="padding: 20px; text-align: center; color: rgba(255,255,255,0.5); font-size: 13px;">暂无动作</div>';
+            document.getElementById('model-name').textContent = this.t('model.notLoaded');
+            document.getElementById('current-expression').textContent = this.t('none');
+            document.getElementById('current-motion').textContent = this.t('none');
+            document.getElementById('expression-select').innerHTML = `<option value="">${this.t('expression.none')}</option>`;
+            document.getElementById('motion-list').innerHTML = `<div style="padding: 20px; text-align: center; color: rgba(255,255,255,0.5); font-size: 13px;">${this.t('motion.none')}</div>`;
             
             // 显示占位符
             if (!this.placeholderText) {
@@ -856,6 +860,7 @@ class Live2DApp {
             if (saved) {
                 const settings = JSON.parse(saved);
                 Object.assign(this.settings, settings);
+                this.settings.language = this.normalizeLanguage(this.settings.language);
                 
                 // 应用到UI
                 document.getElementById('setting-auto-fit').checked = this.settings.autoFit;
@@ -892,12 +897,49 @@ class Live2DApp {
 
     async loadLanguage(lang) {
         try {
-            const res = await fetch(`i18n/${lang}.json`);
+            const normalizedLang = this.normalizeLanguage(lang);
+            const res = await fetch(`i18n/${normalizedLang}.json`);
+            if (!res.ok) {
+                throw new Error(`language file not found: ${normalizedLang}`);
+            }
             const json = await res.json();
-            this.i18n.lang = lang;
+            this.i18n.lang = normalizedLang;
             this.i18n.messages = json;
-            document.documentElement.setAttribute('lang', lang === 'zh' ? 'zh-CN' : 'en');
-        } catch (e) {}
+            if (normalizedLang === 'zh') {
+                document.documentElement.setAttribute('lang', 'zh-CN');
+            } else if (normalizedLang === 'ja') {
+                document.documentElement.setAttribute('lang', 'ja');
+            } else {
+                document.documentElement.setAttribute('lang', 'en');
+            }
+            this.settings.language = normalizedLang;
+            const langSelect = document.getElementById('setting-language');
+            if (langSelect) {
+                langSelect.value = normalizedLang;
+            }
+        } catch (e) {
+            if (lang !== 'en') {
+                await this.loadLanguage('en');
+            }
+        }
+    }
+
+    normalizeLanguage(lang) {
+        const key = (lang || 'en').toString().toLowerCase();
+        if (key.startsWith('zh')) return 'zh';
+        if (key.startsWith('ja') || key.startsWith('jp')) return 'ja';
+        return 'en';
+    }
+
+    getLanguageFromUrl() {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const lang = params.get('lang');
+            if (!lang) return null;
+            return this.normalizeLanguage(lang);
+        } catch (e) {
+            return null;
+        }
     }
 
     t(key) {

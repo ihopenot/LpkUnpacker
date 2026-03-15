@@ -5,6 +5,7 @@ from qfluentwidgets import (PushButton, SubtitleLabel, BodyLabel)
 from qfluentwidgets import CardWidget
 from qfluentwidgets import ComboBox
 from qfluentwidgets import InfoBar, InfoBarPosition
+from Translations import get_i18n, tr
 
 from GUI.Live2DCanvas import Live2DCanvas
 
@@ -17,12 +18,17 @@ class Live2DPreviewWindow(QWidget):
     def __init__(self, model_path=None):
         super().__init__()
         self.model_path = model_path
+        self.i18n = get_i18n()
         self.live2d_canvas = None
         self.control_panel = None
         self.dragging = False
         self.drag_position = QPoint()
         self._selected_motion = None  # tuple(group, index)
         self._motion_items = []  # [(group, index, display)]
+        self.controls_title = None
+        self.motion_label = None
+        self.toggle_controls_btn = None
+        self.close_btn = None
 
         # 设置无边框窗口
         self.setWindowFlag(Qt.FramelessWindowHint, True)
@@ -35,9 +41,10 @@ class Live2DPreviewWindow(QWidget):
 
         # 初始化UI
         self.setup_ui()
+        self.i18n.languageChanged.connect(self.retranslate_ui)
 
     # 新增：统一的错误提示
-    def _show_error_infobar(self, content: str, title: str = "Error"):
+    def _show_error_infobar(self, content: str, title: str = None):
         try:
             # 优先将 InfoBar 挂到主窗口/其他顶层窗口上，避免当前预览窗口关闭后看不到提示
             parent = QApplication.activeWindow()
@@ -47,7 +54,7 @@ class Live2DPreviewWindow(QWidget):
                         parent = w
                         break
             InfoBar.error(
-                title=title,
+                title=title or tr("common.error"),
                 content=content,
                 orient=Qt.Horizontal,
                 isClosable=True,
@@ -66,7 +73,7 @@ class Live2DPreviewWindow(QWidget):
 
         # 统一确定模型路径
         if not self.model_path or not os.path.exists(self.model_path):
-            self._show_error_infobar(f"Model file does not exist: {self.model_path}")
+            self._show_error_infobar(tr("preview_window.error_model_missing", path=self.model_path))
             self.close()
             return
 
@@ -75,7 +82,9 @@ class Live2DPreviewWindow(QWidget):
             self.live2d_canvas = Live2DCanvas(self.model_path)
         except Exception as e:
             # 显示错误并关闭窗口
-            self._show_error_infobar(f"Unexpected error occurred while loading, {type(e).__name__}: {e}.")
+            self._show_error_infobar(
+                tr("preview_window.error_model_load_failed", error_type=type(e).__name__, error=e)
+            )
             self.close()
             return
         # 设置Live2D widget样式
@@ -113,15 +122,15 @@ class Live2DPreviewWindow(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
 
         # 标题
-        title = SubtitleLabel("Live2D Controls", panel)
-        title.setStyleSheet("color: white;")
-        layout.addWidget(title)
+        self.controls_title = SubtitleLabel("", panel)
+        self.controls_title.setStyleSheet("color: white;")
+        layout.addWidget(self.controls_title)
 
         # 动作选择
         row = QHBoxLayout()
-        lbl = BodyLabel("Right-Click Action", panel)
-        lbl.setStyleSheet("color: white;")
-        row.addWidget(lbl)
+        self.motion_label = BodyLabel("", panel)
+        self.motion_label.setStyleSheet("color: white;")
+        row.addWidget(self.motion_label)
         self.motion_combo = ComboBox(panel)
         self.motion_combo.setMinimumWidth(220)
         # 填充动作列表
@@ -135,17 +144,18 @@ class Live2DPreviewWindow(QWidget):
         button_layout = QHBoxLayout()
 
         # 切换控制面板按钮
-        self.toggle_controls_btn = PushButton("Hide Controls", panel)
+        self.toggle_controls_btn = PushButton("", panel)
         self.toggle_controls_btn.clicked.connect(self.toggle_control_panel)
         button_layout.addWidget(self.toggle_controls_btn)
 
         # 关闭按钮
-        close_btn = PushButton("Close", panel)
-        close_btn.clicked.connect(self.close)
-        button_layout.addWidget(close_btn)
+        self.close_btn = PushButton("", panel)
+        self.close_btn.clicked.connect(self.close)
+        button_layout.addWidget(self.close_btn)
 
         layout.addLayout(button_layout)
 
+        self.retranslate_ui()
         return panel
 
     def _populate_motion_combo(self):
@@ -171,7 +181,7 @@ class Live2DPreviewWindow(QWidget):
         except Exception:
             self._motion_items = []
         if not self._motion_items:
-            self.motion_combo.addItem("(No motions available)")
+            self.motion_combo.addItem(tr("preview_window.no_motions"))
             self.motion_combo.setEnabled(False)
             return
         self.motion_combo.setEnabled(True)
@@ -267,12 +277,12 @@ class Live2DPreviewWindow(QWidget):
         """切换控制面板显示/隐藏"""
         if self.control_panel.isVisible():
             self.control_panel.setVisible(False)
-            self.toggle_controls_btn.setText("Show Controls")
+            self.toggle_controls_btn.setText(tr("preview_window.show_controls"))
             # 调整窗口大小
             self.resize(self.width(), self.height() - self.control_panel.height())
         else:
             self.control_panel.setVisible(True)
-            self.toggle_controls_btn.setText("Hide Controls")
+            self.toggle_controls_btn.setText(tr("preview_window.hide_controls"))
             # 调整窗口大小
             self.resize(self.width(), self.height() + self.control_panel.height())
 
@@ -325,3 +335,19 @@ class Live2DPreviewWindow(QWidget):
     def contextMenuEvent(self, event):
         """右键菜单事件"""
         pass
+
+    def retranslate_ui(self):
+        if self.controls_title:
+            self.controls_title.setText(tr("preview_window.controls_title"))
+        if self.motion_label:
+            self.motion_label.setText(tr("preview_window.right_click_action"))
+        if self.toggle_controls_btn:
+            if self.control_panel and self.control_panel.isVisible():
+                self.toggle_controls_btn.setText(tr("preview_window.hide_controls"))
+            else:
+                self.toggle_controls_btn.setText(tr("preview_window.show_controls"))
+        if self.close_btn:
+            self.close_btn.setText(tr("common.close"))
+
+        if self.motion_combo and not self._motion_items and self.motion_combo.count() > 0:
+            self.motion_combo.setItemText(0, tr("preview_window.no_motions"))

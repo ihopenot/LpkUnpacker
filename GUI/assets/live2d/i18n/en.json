@@ -55,6 +55,7 @@
     "section": "WebSocket Connection",
     "statusLabel": "Connection Status",
     "statusDesc": "Realtime communication with main app",
+    "urlLabel": "WebSocket URL",
     "disconnected": "Disconnected",
     "connected": "Connected",
     "urlDesc": "Realtime communication address",

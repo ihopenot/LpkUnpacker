@@ -16,6 +16,7 @@ from qfluentwidgets import (
 
 from Core.steam_integration import SteamIntegration
 from Core.settings_manager import SettingsManager
+from Translations import get_i18n, tr
 
 # Logger class for GUI output
 class QTextEditLogger(logging.Handler):
@@ -73,7 +74,7 @@ class BatchExtractionThread(QThread):
             for i, item in enumerate(self.selected_items):
                 self.progressUpdated.emit(
                     int((i / total_items) * 100), 
-                    f"Processing {item['title']}..."
+                    tr("steam.progress_processing", title=item["title"])
                 )
                 
                 # Create output directory for this item
@@ -91,7 +92,7 @@ class BatchExtractionThread(QThread):
                         logging.error(f"Failed to extract {lpk_file}: {e}")
                         continue
             
-            self.progressUpdated.emit(100, "Extraction completed!")
+            self.progressUpdated.emit(100, tr("steam.progress_completed"))
             self.extractionFinished.emit()
             
         except Exception as e:
@@ -149,22 +150,22 @@ class WorkshopItemCard(CardWidget):
         info_layout.setSpacing(5)
         
         # Item ID
-        info_layout.addWidget(BodyLabel("Item ID:"), 0, 0)
+        info_layout.addWidget(BodyLabel(tr("steam.card.item_id")), 0, 0)
         info_layout.addWidget(CaptionLabel(self.item_data['item_id']), 0, 1)
         
         # LPK files count
         lpk_count = len(self.item_data['lpk_files'])
-        info_layout.addWidget(BodyLabel("LPK Files:"), 1, 0)
+        info_layout.addWidget(BodyLabel(tr("steam.card.lpk_files")), 1, 0)
         info_layout.addWidget(CaptionLabel(str(lpk_count)), 1, 1)
         
         # Size
         size_text = self.format_size(self.item_data['size'])
-        info_layout.addWidget(BodyLabel("Size:"), 0, 2)
+        info_layout.addWidget(BodyLabel(tr("steam.card.size")), 0, 2)
         info_layout.addWidget(CaptionLabel(size_text), 0, 3)
         
         # Config files
         config_count = len(self.item_data['config_files'])
-        info_layout.addWidget(BodyLabel("Config Files:"), 1, 2)
+        info_layout.addWidget(BodyLabel(tr("steam.card.config_files")), 1, 2)
         info_layout.addWidget(CaptionLabel(str(config_count)), 1, 3)
         
         content_layout.addLayout(header_layout)
@@ -197,7 +198,7 @@ class WorkshopItemCard(CardWidget):
     
     def set_no_preview_text(self):
         """Set text when no preview image is available"""
-        self.preview_label.setText("No Preview\nAvailable")
+        self.preview_label.setText(tr("steam.card.no_preview"))
         self.preview_label.setStyleSheet("""
             QLabel {
                 border: 2px solid #E0E0E0;
@@ -237,13 +238,16 @@ class SteamWorkshopPage(QFrame):
         super().__init__(parent)
         self.setObjectName('steamWorkshopPage')
         
+        self.i18n = get_i18n()
         self.steam_integration = SteamIntegration()
         self.settings_manager = SettingsManager()
         self.workshop_items = []
         self.item_cards = []
         
         self.setupUI()
+        self.retranslate_ui()
         self.configure_logging()
+        self.i18n.languageChanged.connect(self.retranslate_ui)
         
         # Auto-detect Steam on startup
         if self.settings_manager.get("auto_detect_steam", True):
@@ -256,15 +260,14 @@ class SteamWorkshopPage(QFrame):
         self.main_layout.setSpacing(15)
         
         # Add title
-        self.title_label = SubtitleLabel("Steam Workshop Manager", self)
+        self.title_label = SubtitleLabel("", self)
         self.main_layout.addWidget(self.title_label)
         
         # Steam path selection
         steam_layout = QHBoxLayout()
-        self.steam_label = BodyLabel("Steam Path:", self)
+        self.steam_label = BodyLabel("", self)
         self.steam_edit = LineEdit(self)
-        self.steam_edit.setPlaceholderText("Select Steam installation directory...")
-        self.steam_browse_btn = PushButton("Browse", self)
+        self.steam_browse_btn = PushButton("", self)
         self.steam_browse_btn.clicked.connect(self.browse_steam_path)
         
         steam_layout.addWidget(self.steam_label)
@@ -275,19 +278,19 @@ class SteamWorkshopPage(QFrame):
         
         # Control buttons
         control_layout = QHBoxLayout()
-        self.scan_btn = PushButton("Scan Workshop", self)
+        self.scan_btn = PushButton("", self)
         self.scan_btn.setIcon(FluentIcon.SEARCH)
         self.scan_btn.clicked.connect(self.scan_workshop)
         
-        self.select_all_btn = PushButton("Select All", self)
+        self.select_all_btn = PushButton("", self)
         self.select_all_btn.clicked.connect(self.select_all_items)
         self.select_all_btn.setEnabled(False)
         
-        self.select_none_btn = PushButton("Select None", self)
+        self.select_none_btn = PushButton("", self)
         self.select_none_btn.clicked.connect(self.select_no_items)
         self.select_none_btn.setEnabled(False)
         
-        self.extract_selected_btn = PushButton("Extract Selected", self)
+        self.extract_selected_btn = PushButton("", self)
         self.extract_selected_btn.setIcon(FluentIcon.DOWNLOAD)
         self.extract_selected_btn.clicked.connect(self.extract_selected)
         self.extract_selected_btn.setEnabled(False)
@@ -301,7 +304,7 @@ class SteamWorkshopPage(QFrame):
         self.main_layout.addLayout(control_layout)
         
         # Status label
-        self.status_label = CaptionLabel("Ready to scan Steam Workshop", self)
+        self.status_label = CaptionLabel("", self)
         self.main_layout.addWidget(self.status_label)
         
         # Workshop items container (scrollable)
@@ -329,6 +332,25 @@ class SteamWorkshopPage(QFrame):
         saved_steam_path = self.settings_manager.get("steam_path", "")
         if saved_steam_path and os.path.exists(saved_steam_path):
             self.steam_edit.setText(saved_steam_path)
+
+    def retranslate_ui(self):
+        self.title_label.setText(tr("steam.title"))
+        self.steam_label.setText(tr("steam.path"))
+        self.steam_edit.setPlaceholderText(tr("steam.placeholder_path"))
+        self.steam_browse_btn.setText(tr("common.browse"))
+
+        self.scan_btn.setText(tr("steam.scan_workshop"))
+        self.select_all_btn.setText(tr("steam.select_all"))
+        self.select_none_btn.setText(tr("steam.select_none"))
+        self.extract_selected_btn.setText(tr("steam.extract_selected"))
+
+        # 避免覆盖正在进行中的状态，只有在初始状态和空文本时重设
+        current_status = self.status_label.text().strip()
+        if not current_status or current_status == tr("steam.status_ready"):
+            self.status_label.setText(tr("steam.status_ready"))
+
+        if self.workshop_items:
+            self.display_workshop_items()
     
     def configure_logging(self):
         """Configure logging to display in the text widget"""
@@ -353,12 +375,13 @@ class SteamWorkshopPage(QFrame):
             if steam_path:
                 self.steam_edit.setText(steam_path)
                 self.settings_manager.set("steam_path", steam_path)
-                self.status_label.setText(f"Auto-detected Steam at: {steam_path}")
+                self.status_label.setText(tr("steam.status_auto_detected", path=steam_path))
     
     def browse_steam_path(self):
         """Browse for Steam installation directory"""
         steam_path = QFileDialog.getExistingDirectory(
-            self, "Select Steam Installation Directory", 
+            self,
+            tr("dialog.select_steam_directory"),
             self.steam_edit.text() or "C:\\"
         )
         
@@ -372,8 +395,8 @@ class SteamWorkshopPage(QFrame):
         
         if not steam_path:
             InfoBar.error(
-                title="Error",
-                content="Please select Steam installation directory first",
+                title=tr("common.error"),
+                content=tr("steam.error_select_steam_first"),
                 orient=Qt.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -384,8 +407,8 @@ class SteamWorkshopPage(QFrame):
         
         if not os.path.exists(steam_path):
             InfoBar.error(
-                title="Error", 
-                content="Steam directory does not exist",
+                title=tr("common.error"),
+                content=tr("steam.error_steam_not_exists"),
                 orient=Qt.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -396,7 +419,7 @@ class SteamWorkshopPage(QFrame):
         
         # Start scanning in background thread
         self.scan_btn.setEnabled(False)
-        self.status_label.setText("Scanning Steam Workshop...")
+        self.status_label.setText(tr("steam.status_scanning"))
         
         self.scan_thread = SteamScanThread(steam_path)
         self.scan_thread.scanFinished.connect(self.on_scan_finished)
@@ -409,7 +432,7 @@ class SteamWorkshopPage(QFrame):
         self.display_workshop_items()
         
         self.scan_btn.setEnabled(True)
-        self.status_label.setText(f"Found {len(workshop_items)} workshop items")
+        self.status_label.setText(tr("steam.status_found_items", count=len(workshop_items)))
         
         if workshop_items:
             self.select_all_btn.setEnabled(True)
@@ -419,10 +442,10 @@ class SteamWorkshopPage(QFrame):
     def on_scan_error(self, error_message: str):
         """Handle scan error"""
         self.scan_btn.setEnabled(True)
-        self.status_label.setText("Scan failed")
+        self.status_label.setText(tr("steam.status_scan_failed"))
         
         InfoBar.error(
-            title="Scan Error",
+            title=tr("steam.error_scan_title"),
             content=error_message,
             orient=Qt.Horizontal,
             isClosable=True,
@@ -463,7 +486,9 @@ class SteamWorkshopPage(QFrame):
         """Update selection count in status"""
         selected_count = sum(1 for card in self.item_cards if card.is_selected())
         total_count = len(self.item_cards)
-        self.status_label.setText(f"Selected {selected_count} of {total_count} items")
+        self.status_label.setText(
+            tr("steam.status_selected_count", selected=selected_count, total=total_count)
+        )
     
     def extract_selected(self):
         """Extract selected workshop items"""
@@ -473,8 +498,8 @@ class SteamWorkshopPage(QFrame):
         
         if not selected_items:
             InfoBar.warning(
-                title="No Selection",
-                content="Please select at least one item to extract",
+                title=tr("steam.warning_no_selection_title"),
+                content=tr("steam.warning_no_selection_content"),
                 orient=Qt.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -485,7 +510,8 @@ class SteamWorkshopPage(QFrame):
         
         # Choose output directory
         output_dir = QFileDialog.getExistingDirectory(
-            self, "Select Output Directory",
+            self,
+            tr("dialog.select_output_directory"),
             self.settings_manager.get("last_output_path", os.getcwd())
         )
         
@@ -518,11 +544,11 @@ class SteamWorkshopPage(QFrame):
         """Handle extraction completion"""
         self.progress_bar.setVisible(False)
         self.extract_selected_btn.setEnabled(True)
-        self.status_label.setText("Extraction completed successfully!")
+        self.status_label.setText(tr("steam.status_extraction_completed"))
         
         InfoBar.success(
-            title="Success",
-            content="All selected items have been extracted successfully",
+            title=tr("common.success"),
+            content=tr("steam.success_extract_content"),
             orient=Qt.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,
@@ -534,10 +560,10 @@ class SteamWorkshopPage(QFrame):
         """Handle extraction error"""
         self.progress_bar.setVisible(False)
         self.extract_selected_btn.setEnabled(True)
-        self.status_label.setText("Extraction failed")
+        self.status_label.setText(tr("steam.status_extraction_failed"))
         
         InfoBar.error(
-            title="Extraction Error",
+            title=tr("steam.error_extraction_title"),
             content=error_message,
             orient=Qt.Horizontal,
             isClosable=True,

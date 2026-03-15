@@ -9,6 +9,7 @@ from qfluentwidgets import (SubtitleLabel, BodyLabel, PushButton, Slider, CheckB
                            CardWidget, SingleDirectionScrollArea, TextBrowser, ColorDialog)
 
 from GUI.Live2DPreviewWindow import Live2DPreviewWindow
+from Translations import get_i18n, tr
 # Try to import motion fixer utilities
 import motion_fixed
 
@@ -112,6 +113,9 @@ class DragDropArea(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.browse_btn = None
+        self.main_text = None
+        self.sub_text = None
+        self.browse_text = None
         self.setAcceptDrops(True)
         self.setupUI()
 
@@ -138,26 +142,33 @@ class DragDropArea(QFrame):
         icon_label.setAlignment(Qt.AlignCenter)
 
         # 主要提示文字
-        main_text = SubtitleLabel("Drag & Drop Live2D model files here", self)
-        main_text.setAlignment(Qt.AlignCenter)
+        self.main_text = SubtitleLabel("", self)
+        self.main_text.setAlignment(Qt.AlignCenter)
 
         # 次要提示文字
-        sub_text = BodyLabel("Supported: *model*.json files", self)
-        sub_text.setAlignment(Qt.AlignCenter)
+        self.sub_text = BodyLabel("", self)
+        self.sub_text.setAlignment(Qt.AlignCenter)
 
         # 额外提示文字
-        browse_text = BodyLabel("Or click to browse files", self)
-        browse_text.setAlignment(Qt.AlignCenter)
+        self.browse_text = BodyLabel("", self)
+        self.browse_text.setAlignment(Qt.AlignCenter)
 
         # 浏览文件按钮
-        self.browse_btn = PushButton("Browse Files", self)
+        self.browse_btn = PushButton("", self)
         self.browse_btn.clicked.connect(self.browse_files)
 
         layout.addWidget(icon_label)
-        layout.addWidget(main_text)
-        layout.addWidget(sub_text)
-        layout.addWidget(browse_text)
+        layout.addWidget(self.main_text)
+        layout.addWidget(self.sub_text)
+        layout.addWidget(self.browse_text)
         layout.addWidget(self.browse_btn)
+        self.retranslate_ui()
+
+    def retranslate_ui(self):
+        self.main_text.setText(tr("preview.drag_main"))
+        self.sub_text.setText(tr("preview.drag_sub"))
+        self.browse_text.setText(tr("preview.drag_or_click"))
+        self.browse_btn.setText(tr("preview.browse_files"))
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         """拖拽进入事件"""
@@ -212,9 +223,9 @@ class DragDropArea(QFrame):
         """浏览文件对话框"""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Select Live2D Model File",
+            tr("dialog.select_live2d_model_file"),
             "",
-            "Live2D Model Files (*model*.json);;All Files (*)"
+            tr("dialog.filter_live2d_model_files")
         )
 
         if file_path and os.path.exists(file_path):
@@ -223,8 +234,8 @@ class DragDropArea(QFrame):
                 self.fileDropped.emit(file_path)
             else:
                 InfoBar.warning(
-                    title="Invalid file type",
-                    content="Please select a *model*.json Live2D model file.",
+                    title=tr("preview.invalid_file_type_title"),
+                    content=tr("preview.invalid_file_type_content"),
                     orient=Qt.Horizontal,
                     isClosable=True,
                     position=InfoBarPosition.TOP,
@@ -274,6 +285,19 @@ class Live2DSettingsPanel(QFrame):
         self.adv_params_container = None
         self.adv_params_container_layout = None
 
+        self.window_group_title = None
+        self.window_size_label = None
+        self.width_label = None
+        self.height_label = None
+        self.opacity_text_label = None
+        self.model_group_title = None
+        self.rotation_text_label = None
+        self.background_label = None
+        self.interaction_group_title = None
+        self.advanced_group_title = None
+        self.refresh_adv_btn = None
+        self.reset_adv_btn = None
+
         self.setupUI()
 
     def setupUI(self):
@@ -311,6 +335,7 @@ class Live2DSettingsPanel(QFrame):
         scroll.setWidgetResizable(True)
         scroll.enableTransparentBackground()
         layout.addWidget(scroll)
+        self.retranslate_ui()
 
     def create_window_settings_group(self):
         """创建窗口设置组"""
@@ -319,19 +344,21 @@ class Live2DSettingsPanel(QFrame):
         layout.setContentsMargins(15, 15, 15, 15)
 
         # 组标题
-        group_title = SubtitleLabel("Preview Window Settings", group)
-        layout.addWidget(group_title)
+        self.window_group_title = SubtitleLabel("", group)
+        layout.addWidget(self.window_group_title)
 
         # 窗口大小设置
         size_layout = QHBoxLayout()
-        size_layout.addWidget(BodyLabel("Window Size:", group))
+        self.window_size_label = BodyLabel("", group)
+        size_layout.addWidget(self.window_size_label)
 
         self.width_spinbox = SpinBox(group)
         self.width_spinbox.setRange(200, 1920)
         self.width_spinbox.setValue(400)
         self.width_spinbox.setSuffix(" px")
 
-        size_layout.addWidget(BodyLabel("W:", group))
+        self.width_label = BodyLabel("", group)
+        size_layout.addWidget(self.width_label)
         size_layout.addWidget(self.width_spinbox)
 
         self.height_spinbox = SpinBox(group)
@@ -339,7 +366,8 @@ class Live2DSettingsPanel(QFrame):
         self.height_spinbox.setValue(300)
         self.height_spinbox.setSuffix(" px")
 
-        size_layout.addWidget(BodyLabel("H:", group))
+        self.height_label = BodyLabel("", group)
+        size_layout.addWidget(self.height_label)
         size_layout.addWidget(self.height_spinbox)
         size_layout.addStretch()
 
@@ -347,7 +375,8 @@ class Live2DSettingsPanel(QFrame):
 
         # 模型透明度
         opacity_layout = QHBoxLayout()
-        opacity_layout.addWidget(BodyLabel("Opacity:", group))
+        self.opacity_text_label = BodyLabel("", group)
+        opacity_layout.addWidget(self.opacity_text_label)
 
         self.opacity_slider = Slider(Qt.Horizontal, group)
         self.opacity_slider.setRange(10, 100)
@@ -367,7 +396,7 @@ class Live2DSettingsPanel(QFrame):
 
         layout.addLayout(opacity_layout)
 
-        self.show_controls_check = CheckBox("Show control panel by default", group)
+        self.show_controls_check = CheckBox("", group)
         layout.addWidget(self.show_controls_check)
 
         # 尺寸变化时也应用
@@ -383,12 +412,13 @@ class Live2DSettingsPanel(QFrame):
         layout.setContentsMargins(15, 15, 15, 15)
 
         # 组标题
-        group_title = SubtitleLabel("Model Display Settings", group)
-        layout.addWidget(group_title)
+        self.model_group_title = SubtitleLabel("", group)
+        layout.addWidget(self.model_group_title)
 
         # 模型旋转
         rotation_layout = QHBoxLayout()
-        rotation_layout.addWidget(BodyLabel("Model Rotation:", group))
+        self.rotation_text_label = BodyLabel("", group)
+        rotation_layout.addWidget(self.rotation_text_label)
 
         self.rotation_slider = Slider(Qt.Horizontal, group)
         self.rotation_slider.setRange(0, 360)
@@ -410,14 +440,15 @@ class Live2DSettingsPanel(QFrame):
 
         # 背景设置
         bg_layout = QHBoxLayout()
-        bg_layout.addWidget(BodyLabel("Background:", group))
+        self.background_label = BodyLabel("", group)
+        bg_layout.addWidget(self.background_label)
 
-        self.bg_transparent_check = CheckBox("Transparent", group)
+        self.bg_transparent_check = CheckBox("", group)
         self.bg_transparent_check.setChecked(True)
         bg_layout.addWidget(self.bg_transparent_check)
 
         # 颜色选择按钮
-        self.bg_color_btn = PushButton("Select Color", group)
+        self.bg_color_btn = PushButton("", group)
         self.bg_color_btn.setEnabled(False)
         self.bg_color_btn.clicked.connect(self.open_color_dialog)
         bg_layout.addWidget(self.bg_color_btn)
@@ -449,21 +480,21 @@ class Live2DSettingsPanel(QFrame):
         layout.setContentsMargins(15, 15, 15, 15)
 
         # 组标题
-        group_title = SubtitleLabel("Interaction Settings", group)
-        layout.addWidget(group_title)
+        self.interaction_group_title = SubtitleLabel("", group)
+        layout.addWidget(self.interaction_group_title)
 
         # 交互选项
-        self.mouse_tracking_check = CheckBox("Enable mouse tracking", group)
+        self.mouse_tracking_check = CheckBox("", group)
         self.mouse_tracking_check.setChecked(True)
         self.mouse_tracking_check.clicked.connect(lambda _: self._emit_settings())
         layout.addWidget(self.mouse_tracking_check)
 
-        self.auto_blink_check = CheckBox("Enable auto blinking animation", group)
+        self.auto_blink_check = CheckBox("", group)
         self.auto_blink_check.setChecked(True)
         self.auto_blink_check.clicked.connect(lambda _: self._emit_settings())
         layout.addWidget(self.auto_blink_check)
 
-        self.auto_breath_check = CheckBox("Enable auto breathing animation", group)
+        self.auto_breath_check = CheckBox("", group)
         self.auto_breath_check.setChecked(True)
         self.auto_breath_check.clicked.connect(lambda _: self._emit_settings())
         layout.addWidget(self.auto_breath_check)
@@ -476,10 +507,10 @@ class Live2DSettingsPanel(QFrame):
         layout = QVBoxLayout(group)
         layout.setContentsMargins(15, 15, 15, 15)
 
-        title = SubtitleLabel("Advanced Settings", group)
-        layout.addWidget(title)
+        self.advanced_group_title = SubtitleLabel("", group)
+        layout.addWidget(self.advanced_group_title)
 
-        self.advanced_enable_check = CheckBox("Enable advanced parameter overrides", group)
+        self.advanced_enable_check = CheckBox("", group)
         self.advanced_enable_check.setChecked(False)
         self.advanced_enable_check.toggled.connect(lambda _: self._emit_settings())
         layout.addWidget(self.advanced_enable_check)
@@ -493,16 +524,59 @@ class Live2DSettingsPanel(QFrame):
 
         # Buttons row (adv params)
         btns_layout = QHBoxLayout()
-        refresh_btn = PushButton("Refresh From Current Model", group)
-        refresh_btn.clicked.connect(self.requestRefreshParams.emit)
-        reset_btn = PushButton("Reset Advanced Params", group)
-        reset_btn.clicked.connect(self.reset_advanced_params)
-        btns_layout.addWidget(refresh_btn)
-        btns_layout.addWidget(reset_btn)
+        self.refresh_adv_btn = PushButton("", group)
+        self.refresh_adv_btn.clicked.connect(self.requestRefreshParams.emit)
+        self.reset_adv_btn = PushButton("", group)
+        self.reset_adv_btn.clicked.connect(self.reset_advanced_params)
+        btns_layout.addWidget(self.refresh_adv_btn)
+        btns_layout.addWidget(self.reset_adv_btn)
         btns_layout.addStretch()
         layout.addLayout(btns_layout)
 
         return group
+
+    def retranslate_ui(self):
+        if self.window_group_title:
+            self.window_group_title.setText(tr("preview.window_settings"))
+        if self.window_size_label:
+            self.window_size_label.setText(tr("preview.window_size"))
+        if self.width_label:
+            self.width_label.setText(tr("preview.width_short"))
+        if self.height_label:
+            self.height_label.setText(tr("preview.height_short"))
+        if self.opacity_text_label:
+            self.opacity_text_label.setText(tr("preview.opacity"))
+        if self.show_controls_check:
+            self.show_controls_check.setText(tr("preview.show_control_panel"))
+
+        if self.model_group_title:
+            self.model_group_title.setText(tr("preview.model_display_settings"))
+        if self.rotation_text_label:
+            self.rotation_text_label.setText(tr("preview.model_rotation"))
+        if self.background_label:
+            self.background_label.setText(tr("preview.background"))
+        if self.bg_transparent_check:
+            self.bg_transparent_check.setText(tr("preview.transparent"))
+        if self.bg_color_btn:
+            self.bg_color_btn.setText(tr("preview.select_color"))
+
+        if self.interaction_group_title:
+            self.interaction_group_title.setText(tr("preview.interaction_settings"))
+        if self.mouse_tracking_check:
+            self.mouse_tracking_check.setText(tr("preview.enable_mouse_tracking"))
+        if self.auto_blink_check:
+            self.auto_blink_check.setText(tr("preview.enable_auto_blink"))
+        if self.auto_breath_check:
+            self.auto_breath_check.setText(tr("preview.enable_auto_breath"))
+
+        if self.advanced_group_title:
+            self.advanced_group_title.setText(tr("preview.advanced_settings"))
+        if self.advanced_enable_check:
+            self.advanced_enable_check.setText(tr("preview.enable_advanced_overrides"))
+        if self.refresh_adv_btn:
+            self.refresh_adv_btn.setText(tr("preview.refresh_current_model"))
+        if self.reset_adv_btn:
+            self.reset_adv_btn.setText(tr("preview.reset_advanced_params"))
 
     def _emit_settings(self):
         try:
@@ -640,9 +714,9 @@ class Live2DSettingsPanel(QFrame):
         """使用 qfluentwidgets 的 ColorDialog 选择背景颜色，并实时应用"""
         current = self.selected_bg_color if isinstance(self.selected_bg_color, QColor) else QColor(255, 255, 255)
         try:
-            dlg = ColorDialog(current, "Choose Background Color", self, enableAlpha=False)
+            dlg = ColorDialog(current, tr("dialog.choose_background_color"), self, enableAlpha=False)
         except TypeError:
-            dlg = ColorDialog(current, "Choose Background Color", self)
+            dlg = ColorDialog(current, tr("dialog.choose_background_color"), self)
         def on_color_changed(color: QColor):
             if isinstance(color, QColor) and color.isValid():
                 self.selected_bg_color = color
@@ -674,6 +748,7 @@ class PreviewPage(QFrame):
         self.main_layout = None
         self.current_model_path = None
         self.setObjectName('previewPage')
+        self.i18n = get_i18n()
         self.preview_window = None
         # 新增：预览按钮冷却
         self._preview_cooldown_timer = None
@@ -682,6 +757,8 @@ class PreviewPage(QFrame):
         self._temp_model_json_path = None
 
         self.setupUI()
+        self.retranslate_ui()
+        self.i18n.languageChanged.connect(self.retranslate_ui)
         # 应用退出前做一次兜底清理，防止文件句柄未及时释放
         try:
             app = QCoreApplication.instance()
@@ -696,7 +773,7 @@ class PreviewPage(QFrame):
         self.main_layout.setSpacing(10)
 
         # 标题
-        self.title_label = SubtitleLabel("Live2D Preview", self)
+        self.title_label = SubtitleLabel("", self)
         self.main_layout.addWidget(self.title_label)
 
         # 创建分割器
@@ -715,7 +792,6 @@ class PreviewPage(QFrame):
 
         # 当前模型信息
         self.model_info_text_box = TextBrowser(self)
-        self.model_info_text_box.setMarkdown("### No model loaded ✨")
 
         left_layout.addWidget(self.model_info_text_box)
 
@@ -723,12 +799,12 @@ class PreviewPage(QFrame):
         button_layout = QHBoxLayout()
         button_layout.setSpacing(30)
         button_layout.addStretch()
-        self.preview_btn = PushButton("Preview Model", self)
+        self.preview_btn = PushButton("", self)
         self.preview_btn.setEnabled(False)
         # 修改：接入冷却逻辑
         self.preview_btn.clicked.connect(self._on_preview_clicked)
 
-        self.close_all_btn = PushButton("Close Window", self)
+        self.close_all_btn = PushButton("", self)
         self.close_all_btn.clicked.connect(self.close_preview_window)
 
         button_layout.addWidget(self.preview_btn)
@@ -762,13 +838,26 @@ class PreviewPage(QFrame):
         self._preview_cooldown_timer.setSingleShot(True)
         self._preview_cooldown_timer.timeout.connect(self._on_preview_cooldown_end)
 
+    def retranslate_ui(self):
+        self.title_label.setText(tr("preview.title"))
+        self.preview_btn.setText(tr("preview.preview_model"))
+        self.close_all_btn.setText(tr("preview.close_window"))
+
+        if hasattr(self, "drag_drop_area") and self.drag_drop_area:
+            self.drag_drop_area.retranslate_ui()
+        if hasattr(self, "settings_panel") and self.settings_panel:
+            self.settings_panel.retranslate_ui()
+
+        if not self.current_model_path:
+            self.model_info_text_box.setMarkdown(tr("preview.model_info_empty"))
+
     # 新增：预览按钮点击（带冷却）
     def _on_preview_clicked(self):
         # 若处于冷却中，拦截点击并提示
         if self._preview_cooldown_timer and self._preview_cooldown_timer.isActive():
             InfoBar.warning(
-                title="Wait",
-                content="请稍后再点击预览按钮",
+                title=tr("preview.wait_title"),
+                content=tr("preview.wait_content"),
                 orient=Qt.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -780,7 +869,7 @@ class PreviewPage(QFrame):
         if self.preview_btn is not None:
             self.preview_btn.setEnabled(False)
             try:
-                self.preview_btn.setToolTip("按钮冷却中…")
+                self.preview_btn.setToolTip(tr("preview.tooltip_cooldown"))
             except Exception:
                 pass
         # 开始冷却计时
@@ -818,22 +907,29 @@ class PreviewPage(QFrame):
     def on_file_dropped(self, file_path):
         """处理文件拖拽"""
         if not os.path.exists(file_path):
-            self.show_error("File not found", f"The file {file_path} does not exist.")
+            self.show_error(
+                tr("preview.file_not_found_title"),
+                tr("preview.file_not_found_content", file=file_path)
+            )
             return
 
         # 检查文件扩展名，支持*model*.json文件
         file_ext = file_path.lower()
         if not _is_model_json(file_ext):
-            self.show_error("Invalid file type",
-                           "Please select a *model*.json Live2D model file.")
+            self.show_error(
+                tr("preview.invalid_file_type_title"),
+                tr("preview.invalid_file_type_content")
+            )
             return
 
         # 预处理与校验：确保为 Live2D v3 的 json，生成美化副本
         try:
             safe_path = _prepare_and_validate_model_json(file_path)
         except Exception as e:
-            self.show_error("Invalid Live2D model json",
-                            f"{os.path.basename(file_path)} is not a valid Live2D v3 model json: {e}")
+            self.show_error(
+                tr("preview.invalid_live2d_title"),
+                tr("preview.invalid_live2d_content", file=os.path.basename(file_path), error=str(e))
+            )
             return
 
         # 清理旧的临时文件并保存新的
@@ -847,15 +943,7 @@ class PreviewPage(QFrame):
         model_name = os.path.basename(self.current_model_path)
         model_dir = os.path.dirname(self.current_model_path)
 
-        info_text = f"""### Model Loaded ✨
-
-**File:** `{model_name}`
-
-**Directory:** `{model_dir}`
-
-**Type:** Live2D v3 Config (*model*.json)
-
-Ready to preview! 🚀"""
+        info_text = tr("preview.model_info_loaded", file=model_name, directory=model_dir)
 
         self.model_info_text_box.setMarkdown(info_text)
         # 仅在未处于冷却中时启用预览按钮
@@ -864,8 +952,8 @@ Ready to preview! 🚀"""
 
         # 显示成功信息
         InfoBar.success(
-            title="Model Loaded",
-            content=f"Successfully loaded: {model_name}",
+            title=tr("preview.model_loaded_title"),
+            content=tr("preview.model_loaded_content", model=model_name),
             orient=Qt.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,
@@ -876,7 +964,10 @@ Ready to preview! 🚀"""
     def preview_current_model(self):
         """预览当前模型"""
         if not self.current_model_path:
-            self.show_error("No model selected", "Please drag and drop a *model*.json file first.")
+            self.show_error(
+                tr("preview.no_model_selected_title"),
+                tr("preview.no_model_selected_content")
+            )
             return
 
         # 保证同时仅有一个预览窗口

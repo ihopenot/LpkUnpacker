@@ -22,7 +22,7 @@ class SettingsManager:
             "auto_detect_steam": True,
             "remember_paths": True,
             "theme": "auto",
-            "language": "zh_CN",
+            "language": "en_US",
             "window_geometry": {
                 "width": 1000,
                 "height": 700,

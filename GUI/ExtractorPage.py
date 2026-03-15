@@ -8,6 +8,7 @@ from qfluentwidgets import (
     PushButton, LineEdit, ComboBox, ProgressBar, TextEdit, SubtitleLabel,
     FluentIcon, InfoBar, InfoBarPosition, MessageBox
 )
+from Translations import get_i18n, tr
 
 # Logger class for GUI output
 class QTextEditLogger(logging.Handler):
@@ -57,9 +58,12 @@ class ExtractorPage(QFrame):
         
         # Default output directory
         self.default_output_dir = os.path.join(os.getcwd(), "output")
+        self.i18n = get_i18n()
         
         self.setupUI()
+        self.retranslate_ui()
         self.configure_logging()
+        self.i18n.languageChanged.connect(self.retranslate_ui)
         
         # 响应窗口大小变化
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -71,15 +75,14 @@ class ExtractorPage(QFrame):
         self.main_layout.setSpacing(10)
         
         # Add title
-        self.title_label = SubtitleLabel("LPK File Extractor", self)
+        self.title_label = SubtitleLabel("", self)
         self.main_layout.addWidget(self.title_label)
         
         # LPK file selection
         self.lpk_layout = QHBoxLayout()
-        self.lpk_label = SubtitleLabel("LPK File:", self)
+        self.lpk_label = SubtitleLabel("", self)
         self.lpk_edit = LineEdit(self)
-        self.lpk_edit.setPlaceholderText("Select LPK file or drag & drop file here...")
-        self.lpk_button = PushButton("Browse", self)
+        self.lpk_button = PushButton("", self)
         self.lpk_button.setIcon(FluentIcon.FOLDER)
         self.lpk_button.clicked.connect(self.browse_lpk)
         self.lpk_layout.addWidget(self.lpk_label)
@@ -89,10 +92,9 @@ class ExtractorPage(QFrame):
         
         # Config file selection (optional)
         self.config_layout = QHBoxLayout()
-        self.config_label = SubtitleLabel("Config File:", self)
+        self.config_label = SubtitleLabel("", self)
         self.config_edit = LineEdit(self)
-        self.config_edit.setPlaceholderText("Select config.json (required for Steam workshop files)")
-        self.config_button = PushButton("Browse", self)
+        self.config_button = PushButton("", self)
         self.config_button.setIcon(FluentIcon.FOLDER)
         self.config_button.clicked.connect(self.browse_config)
         self.config_layout.addWidget(self.config_label)
@@ -102,12 +104,11 @@ class ExtractorPage(QFrame):
         
         # Output directory selection
         self.output_layout = QHBoxLayout()
-        self.output_label = SubtitleLabel("Output Directory:", self)
+        self.output_label = SubtitleLabel("", self)
         self.output_edit = LineEdit(self)
-        self.output_edit.setPlaceholderText("Select output directory...")
         # Set default output directory
         self.output_edit.setText(self.default_output_dir)
-        self.output_button = PushButton("Browse", self)
+        self.output_button = PushButton("", self)
         self.output_button.setIcon(FluentIcon.FOLDER)
         self.output_button.clicked.connect(self.browse_output)
         self.output_layout.addWidget(self.output_label)
@@ -122,20 +123,20 @@ class ExtractorPage(QFrame):
         self.main_layout.addWidget(self.progress_bar)
         
         # Extract button
-        self.extract_button = PushButton("Extract", self)
+        self.extract_button = PushButton("", self)
         self.extract_button.setIcon(FluentIcon.PLAY)
         self.extract_button.clicked.connect(self.start_extraction)
         self.main_layout.addWidget(self.extract_button)
         
         # Open output folder button
-        self.open_folder_button = PushButton("Open Output Folder", self)
+        self.open_folder_button = PushButton("", self)
         self.open_folder_button.setIcon(FluentIcon.FOLDER)
         self.open_folder_button.clicked.connect(self.open_output_folder)
         self.open_folder_button.setEnabled(False)
         self.main_layout.addWidget(self.open_folder_button)
         
         # Log output
-        self.log_label = SubtitleLabel("Log:", self)
+        self.log_label = SubtitleLabel("", self)
         self.main_layout.addWidget(self.log_label)
         
         self.log_text = TextEdit(self)
@@ -154,6 +155,24 @@ class ExtractorPage(QFrame):
         # 设置TextEdit的响应式尺寸
         self.log_text.setMinimumHeight(200)
         self.log_text.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+    def retranslate_ui(self):
+        self.title_label.setText(tr("extractor.title"))
+        self.lpk_label.setText(tr("extractor.lpk_file"))
+        self.lpk_edit.setPlaceholderText(tr("extractor.placeholder_lpk"))
+        self.lpk_button.setText(tr("common.browse"))
+
+        self.config_label.setText(tr("extractor.config_file"))
+        self.config_edit.setPlaceholderText(tr("extractor.placeholder_config"))
+        self.config_button.setText(tr("common.browse"))
+
+        self.output_label.setText(tr("extractor.output_directory"))
+        self.output_edit.setPlaceholderText(tr("extractor.placeholder_output"))
+        self.output_button.setText(tr("common.browse"))
+
+        self.extract_button.setText(tr("extractor.extract_button"))
+        self.open_folder_button.setText(tr("extractor.open_output_folder"))
+        self.log_label.setText(tr("extractor.log"))
         
     # Drag & Drop support
     def dragEnterEvent(self, event: QDragEnterEvent):
@@ -198,7 +217,10 @@ class ExtractorPage(QFrame):
         
     def browse_lpk(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select LPK File", "", "LPK Files (*.lpk)"
+            self,
+            tr("dialog.select_lpk_file"),
+            "",
+            tr("dialog.filter_lpk_files")
         )
         if file_path:
             # Use absolute path
@@ -212,7 +234,10 @@ class ExtractorPage(QFrame):
                 
     def browse_config(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select Config File", "", "JSON Files (*.json)"
+            self,
+            tr("dialog.select_config_file"),
+            "",
+            tr("dialog.filter_json_files")
         )
         if file_path:
             # Use absolute path
@@ -220,7 +245,8 @@ class ExtractorPage(QFrame):
             
     def browse_output(self):
         dir_path = QFileDialog.getExistingDirectory(
-            self, "Select Output Directory"
+            self,
+            tr("dialog.select_output_directory")
         )
         if dir_path:
             # Use absolute path
@@ -269,8 +295,8 @@ class ExtractorPage(QFrame):
         
         if not lpk_path or not os.path.exists(lpk_path):
             InfoBar.error(
-                title="Error",
-                content="Please select a valid LPK file.",
+                title=tr("common.error"),
+                content=tr("extractor.error_invalid_lpk"),
                 parent=self,
                 position=InfoBarPosition.TOP,
                 duration=3000
@@ -288,8 +314,8 @@ class ExtractorPage(QFrame):
                 os.makedirs(output_dir)
             except OSError as e:
                 InfoBar.error(
-                    title="Error",
-                    content=f"Failed to create output directory: {str(e)}",
+                    title=tr("common.error"),
+                    content=tr("extractor.error_create_output_failed", error=str(e)),
                     parent=self,
                     position=InfoBarPosition.TOP,
                     duration=3000
@@ -329,8 +355,8 @@ class ExtractorPage(QFrame):
         
         # Show success message
         InfoBar.success(
-            title="Success",
-            content=f"LPK file extracted successfully to {output_dir}",
+            title=tr("common.success"),
+            content=tr("extractor.success_extracted", output=output_dir),
             parent=self,
             position=InfoBarPosition.TOP,
             duration=5000
@@ -347,7 +373,7 @@ class ExtractorPage(QFrame):
         
         # Show error message
         MessageBox(
-            "Extraction Error",
+            tr("extractor.error_title"),
             error_message,
             self
         ).exec_()
@@ -360,8 +386,8 @@ class ExtractorPage(QFrame):
             QDesktopServices.openUrl(QUrl.fromLocalFile(output_dir))
         else:
             InfoBar.warning(
-                title="Warning",
-                content="Output directory does not exist.",
+                title=tr("common.warning"),
+                content=tr("extractor.warning_output_missing"),
                 parent=self,
                 position=InfoBarPosition.TOP,
                 duration=3000

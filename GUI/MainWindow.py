@@ -4,6 +4,7 @@ from PyQt5.QtGui import QIcon, QFont, QResizeEvent
 from qfluentwidgets import NavigationItemPosition, FluentWindow, setTheme, Theme, setFont
 from qfluentwidgets import FluentIcon as FIF
 from Core.settings_manager import SettingsManager
+from Translations import get_i18n, tr, normalize_language_code
 import os
 
 # Import pages - using try/except to handle potential import errors
@@ -83,6 +84,21 @@ except Exception as e:
             self.setObjectName('webPreviewPage')
             QHBoxLayout(self).addWidget(QFrame(self))
 
+# Try import SettingsPage with fallback
+try:
+    from GUI.SettingsPage import SettingsPage
+except Exception as e:
+    import traceback
+    print(f"Error importing SettingsPage: {e}")
+    traceback.print_exc()
+    class SettingsPage(QFrame):
+        languageChanged = None
+        themeChanged = None
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.setObjectName('settingsPage')
+            QHBoxLayout(self).addWidget(QFrame(self))
+
 class MainWindow(FluentWindow):
     """ Main Window with Navigation """
     
@@ -92,6 +108,8 @@ class MainWindow(FluentWindow):
         
         # Initialize settings manager
         self.settings_manager = SettingsManager()
+        self.i18n = get_i18n()
+        self.i18n.set_language(normalize_language_code(self.settings_manager.get("language", "en_US")))
         
         # Create sub-interfaces
         try:
@@ -129,6 +147,19 @@ class MainWindow(FluentWindow):
             self.webPreviewPage = QFrame(self)
             self.webPreviewPage.setObjectName('webPreviewPage')
 
+        try:
+            self.settingsPage = SettingsPage(self)
+            language_changed = getattr(self.settingsPage, "languageChanged", None)
+            theme_changed = getattr(self.settingsPage, "themeChanged", None)
+            if language_changed is not None and hasattr(language_changed, "connect"):
+                language_changed.connect(self.on_language_changed)
+            if theme_changed is not None and hasattr(theme_changed, "connect"):
+                theme_changed.connect(self.on_theme_changed)
+        except Exception as e:
+            print(f"Error creating SettingsPage: {e}")
+            self.settingsPage = QFrame(self)
+            self.settingsPage.setObjectName('settingsPage')
+
         self.initWindow()
         self.initNavigation()
         
@@ -137,45 +168,58 @@ class MainWindow(FluentWindow):
         
         # 为整个应用设置字体
         self.updateFontSize()
+
+        self.i18n.languageChanged.connect(self.retranslate_ui)
+        self.retranslate_ui()
         
         # 安装事件过滤器以处理缩放
         self.installEventFilter(self)
         
     def initWindow(self):
         self.resize(1000, 700)  # 稍微增大初始窗口尺寸
-        self.setWindowTitle('LPK Unpacker GUI')
+        self.setWindowTitle(tr("main.window_title"))
         
     def initNavigation(self):
         # Add sub-interfaces to navigation
         try:
-            self.addSubInterface(self.extractorPage, FIF.ZIP_FOLDER, 'LPK Extractor')
+            self.addSubInterface(self.extractorPage, FIF.ZIP_FOLDER, tr("main.nav.extractor"))
         except Exception as e:
             print(f"Error adding ExtractorPage to navigation: {e}")
 
         try:
-            self.addSubInterface(self.steamWorkshopPage, FIF.GAME, 'Steam Workshop')
+            self.addSubInterface(self.steamWorkshopPage, FIF.GAME, tr("main.nav.steam"))
         except Exception as e:
             print(f"Error adding SteamWorkshopPage to navigation: {e}")
             
         try:
             # Only add native preview tab when not disabled
             if not _DISABLE_NATIVE_PREVIEW:
-                self.addSubInterface(self.previewPage, FIF.MOVIE, 'Live2D Preview (Native)')
+                self.addSubInterface(self.previewPage, FIF.MOVIE, tr("main.nav.preview_native"))
         except Exception as e:
             print(f"Error adding PreviewPage to navigation: {e}")
             
         try:
-            self.addSubInterface(self.webPreviewPage, FIF.GLOBE, 'Live2D Preview (Web)')
+            self.addSubInterface(self.webPreviewPage, FIF.GLOBE, tr("main.nav.preview_web"))
         except Exception as e:
             print(f"Error adding WebPreviewPage to navigation: {e}")
 
         self.navigationInterface.addSeparator()
             
         try:
-            self.addSubInterface(self.encryptionPage, FIF.DOWNLOAD, 'Encryption Package Extractor',
+            self.addSubInterface(self.encryptionPage, FIF.DOWNLOAD, tr("main.nav.encryption"),
                               NavigationItemPosition.SCROLL)
         except Exception as e:
             print(f"Error adding EncryptionPage to navigation: {e}")
+
+        try:
+            self.addSubInterface(
+                self.settingsPage,
+                FIF.SETTING,
+                tr("main.nav.settings"),
+                NavigationItemPosition.BOTTOM
+            )
+        except Exception as e:
+            print(f"Error adding SettingsPage to navigation: {e}")
         
         # Steam Workshop already added to top navigation above
             
@@ -212,7 +256,8 @@ class MainWindow(FluentWindow):
             self.previewPage,
             self.encryptionPage,
             getattr(self, 'steamWorkshopPage', None),
-            getattr(self, 'webPreviewPage', None)
+            getattr(self, 'webPreviewPage', None),
+            getattr(self, 'settingsPage', None)
         ]
         for page in filter(None, pages):
             if hasattr(page, 'updateUIScale'):
@@ -255,3 +300,29 @@ class MainWindow(FluentWindow):
                     background-color: white;
                 }
             """)
+
+    def retranslate_ui(self):
+        self.setWindowTitle(tr("main.window_title"))
+
+        for page in [
+            self.extractorPage,
+            self.previewPage,
+            self.encryptionPage,
+            getattr(self, "steamWorkshopPage", None),
+            getattr(self, "webPreviewPage", None),
+            getattr(self, "settingsPage", None),
+        ]:
+            if page is not None and hasattr(page, "retranslate_ui"):
+                try:
+                    page.retranslate_ui()
+                except Exception as e:
+                    print(f"Error re-translating {page.objectName()}: {e}")
+
+    def on_language_changed(self, language: str):
+        normalized = normalize_language_code(language)
+        self.settings_manager.set("language", normalized)
+        self.i18n.set_language(normalized)
+
+    def on_theme_changed(self, theme: str):
+        self.settings_manager.set("theme", str(theme).lower())
+        self.apply_theme()

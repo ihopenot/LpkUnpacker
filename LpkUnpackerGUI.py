@@ -3,6 +3,8 @@ import os
 from PyQt5.QtCore import Qt, QCoreApplication
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QIcon
+from Core.settings_manager import SettingsManager
+from Translations import get_i18n, normalize_language_code
 
 # 确保设置正确的属性来支持高DPI缩放
 QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
@@ -14,6 +16,11 @@ QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPo
 def run_application():
     # 创建QApplication实例
     app = QApplication(sys.argv)
+
+    # 在创建窗口前初始化语言
+    settings_manager = SettingsManager()
+    language = normalize_language_code(settings_manager.get("language", "en_US"))
+    get_i18n().set_language(language)
     
     # 设置应用程序图标 - 这会影响任务栏图标
     icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Img/icon.ico")

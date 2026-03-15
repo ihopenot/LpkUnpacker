@@ -3,12 +3,14 @@ from PyQt5.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QApplicati
 from PyQt5.QtCore import Qt, QUrl, QTimer
 from PyQt5.QtGui import QDesktopServices
 from qfluentwidgets import SubtitleLabel, PushButton, InfoBar, InfoBarPosition, LineEdit, FluentIcon
+from Translations import get_i18n, tr
 
 
 class WebPreviewPage(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName('webPreviewPage')  # Required for navigation
+        self.i18n = get_i18n()
         self.current_model_path = None
         self.server_url = None
         self.server_port = None
@@ -17,6 +19,8 @@ class WebPreviewPage(QFrame):
         self.last_browse_dir = os.path.join(os.getcwd(), "output")  # 默认为项目output目录
         
         self.setupUI()
+        self.retranslate_ui()
+        self.i18n.languageChanged.connect(self.retranslate_ui)
         self.startWebServer()
 
     def setupUI(self):
@@ -26,29 +30,25 @@ class WebPreviewPage(QFrame):
         self.main_layout.setSpacing(15)
         
         # 标题
-        self.title_label = SubtitleLabel("Live2D Web Preview", self)
+        self.title_label = SubtitleLabel("", self)
         self.main_layout.addWidget(self.title_label)
         
         # 描述
-        self.desc_label = QLabel(
-            "Display Live2D models in the browser via local proxy.",
-            self
-        )
+        self.desc_label = QLabel("", self)
         self.desc_label.setWordWrap(True)
         self.main_layout.addWidget(self.desc_label)
         
         # 服务器地址
         self.server_layout = QHBoxLayout()
-        self.server_label = SubtitleLabel("Server URL:", self)
+        self.server_label = SubtitleLabel("", self)
         self.server_edit = LineEdit(self)
         self.server_edit.setReadOnly(True)
-        self.server_edit.setPlaceholderText("Starting server...")
         self.server_layout.addWidget(self.server_label)
         self.server_layout.addWidget(self.server_edit, 1)
         self.main_layout.addLayout(self.server_layout)
         
         # 打开浏览器按钮
-        self.open_browser_btn = PushButton("Open in Browser", self)
+        self.open_browser_btn = PushButton("", self)
         self.open_browser_btn.setIcon(FluentIcon.GLOBE)
         self.open_browser_btn.clicked.connect(self.openInBrowser)
         self.open_browser_btn.setEnabled(False)
@@ -62,10 +62,9 @@ class WebPreviewPage(QFrame):
         
         # 模型文件夹选择
         self.model_layout = QHBoxLayout()
-        self.model_label = SubtitleLabel("Model Folder:", self)
+        self.model_label = SubtitleLabel("", self)
         self.model_edit = LineEdit(self)
-        self.model_edit.setPlaceholderText("Select Live2D model folder...")
-        self.model_button = PushButton("Browse", self)
+        self.model_button = PushButton("", self)
         self.model_button.setIcon(FluentIcon.FOLDER)
         self.model_button.clicked.connect(self.selectModelFolder)
         self.model_layout.addWidget(self.model_label)
@@ -74,13 +73,38 @@ class WebPreviewPage(QFrame):
         self.main_layout.addLayout(self.model_layout)
         
         # 发送到浏览器按钮
-        self.load_model_btn = PushButton("Load Model to Browser", self)
+        self.load_model_btn = PushButton("", self)
         self.load_model_btn.setIcon(FluentIcon.SEND)
         self.load_model_btn.clicked.connect(self.loadModelToPreview)
         self.load_model_btn.setEnabled(False)
         self.main_layout.addWidget(self.load_model_btn)
         
         self.main_layout.addStretch(1)
+
+    def retranslate_ui(self):
+        self.title_label.setText(tr("web.title"))
+        self.desc_label.setText(tr("web.description"))
+        self.server_label.setText(tr("web.server_url"))
+        if not self.server_edit.text():
+            self.server_edit.setPlaceholderText(tr("web.server_starting"))
+        self.open_browser_btn.setText(tr("web.open_in_browser"))
+        self.model_label.setText(tr("web.model_folder"))
+        self.model_edit.setPlaceholderText(tr("web.placeholder_model_folder"))
+        self.model_button.setText(tr("common.browse"))
+        self.load_model_btn.setText(tr("web.load_model_button"))
+
+    def _to_web_language(self) -> str:
+        language = self.i18n.language
+        if language.startswith("zh"):
+            return "zh"
+        if language.startswith("ja"):
+            return "ja"
+        return "en"
+
+    def _preview_page_url(self) -> str:
+        if not self.server_url:
+            return ""
+        return f"{self.server_url}/static/live2d/web.html?lang={self._to_web_language()}"
             
     
     def startWebServer(self):
@@ -99,8 +123,8 @@ class WebPreviewPage(QFrame):
             print(f"✅ Web server started: {self.server_url}")
             
             InfoBar.success(
-                title="Server Started",
-                content=f"Web preview server is running at {self.server_url}",
+                title=tr("web.infobar_server_started_title"),
+                content=tr("web.infobar_server_started_content", url=self.server_url),
                 orient=Qt.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -110,11 +134,11 @@ class WebPreviewPage(QFrame):
             
         except Exception as e:
             print(f"❌ Failed to start web server: {e}")
-            self.server_edit.setPlaceholderText("Failed to start server")
+            self.server_edit.setPlaceholderText(tr("web.server_failed_placeholder"))
             
             InfoBar.error(
-                title="Startup Failed",
-                content=f"Cannot start web server: {str(e)}",
+                title=tr("web.infobar_startup_failed_title"),
+                content=tr("web.infobar_startup_failed_content", error=str(e)),
                 orient=Qt.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -126,11 +150,11 @@ class WebPreviewPage(QFrame):
         """在浏览器中打开"""
         if self.server_url:
             try:
-                QDesktopServices.openUrl(QUrl(self.server_url))
+                QDesktopServices.openUrl(QUrl(self._preview_page_url()))
                 
                 InfoBar.success(
-                    title="Success",
-                    content="Preview page opened in browser",
+                    title=tr("common.success"),
+                    content=tr("web.infobar_preview_opened"),
                     orient=Qt.Horizontal,
                     isClosable=True,
                     position=InfoBarPosition.TOP,
@@ -140,8 +164,8 @@ class WebPreviewPage(QFrame):
             except Exception as e:
                 print(f"❌ Failed to open browser: {e}")
                 InfoBar.error(
-                    title="Failed",
-                    content=f"Cannot open browser: {str(e)}",
+                    title=tr("web.infobar_open_browser_failed_title"),
+                    content=tr("web.infobar_open_browser_failed_content", error=str(e)),
                     orient=Qt.Horizontal,
                     isClosable=True,
                     position=InfoBarPosition.TOP,
@@ -156,7 +180,7 @@ class WebPreviewPage(QFrame):
         
         folder = QFileDialog.getExistingDirectory(
             self,
-            "Select Live2D Model Folder",
+            tr("dialog.select_live2d_model_folder"),
             start_dir
         )
         
@@ -180,8 +204,8 @@ class WebPreviewPage(QFrame):
         """加载模型到预览器"""
         if not self.current_model_path:
             InfoBar.warning(
-                title="No Model Selected",
-                content="Please select a Live2D model folder first",
+                title=tr("web.warning_no_model_title"),
+                content=tr("web.warning_no_model_content"),
                 orient=Qt.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -201,7 +225,7 @@ class WebPreviewPage(QFrame):
             # 查找模型JSON文件
             model_json = self.findModelJson(self.current_model_path)
             if not model_json:
-                raise Exception("No valid Live2D model JSON found")
+                raise Exception(tr("web.error_no_valid_model_json"))
             
             # 构建模型URL
             model_filename = os.path.basename(model_json)
@@ -214,8 +238,8 @@ class WebPreviewPage(QFrame):
                     raise Exception(f"Model URL not accessible ({check.status_code})")
             except Exception as e:
                 InfoBar.error(
-                    title="Model URL Error",
-                    content=f"Cannot access model JSON: {model_url}\n{e}",
+                    title=tr("web.error_model_url_title"),
+                    content=tr("web.error_model_url_content", url=model_url, error=str(e)),
                     orient=Qt.Horizontal,
                     isClosable=True,
                     position=InfoBarPosition.TOP,
@@ -245,8 +269,8 @@ class WebPreviewPage(QFrame):
 
                 if clients <= 0:
                     InfoBar.warning(
-                        title="No Browser Connected",
-                        content="Preview page not connected (WS). Opening browser and will retry...",
+                        title=tr("web.warning_no_browser_title"),
+                        content=tr("web.warning_no_browser_content"),
                         orient=Qt.Horizontal,
                         isClosable=True,
                         position=InfoBarPosition.TOP,
@@ -281,8 +305,8 @@ class WebPreviewPage(QFrame):
                                     ok = False
                             if ok:
                                 InfoBar.success(
-                                    title="Model Loaded",
-                                    content="Model sent to browser preview (auto retry)",
+                                    title=tr("web.success_model_loaded_title"),
+                                    content=tr("web.success_model_loaded_retry"),
                                     orient=Qt.Horizontal,
                                     isClosable=True,
                                     position=InfoBarPosition.TOP,
@@ -308,8 +332,8 @@ class WebPreviewPage(QFrame):
                     return
 
                 InfoBar.success(
-                    title="Model Loaded",
-                    content="Model sent to browser preview successfully",
+                    title=tr("web.success_model_loaded_title"),
+                    content=tr("web.success_model_loaded_content"),
                     orient=Qt.Horizontal,
                     isClosable=True,
                     position=InfoBarPosition.TOP,
@@ -323,8 +347,8 @@ class WebPreviewPage(QFrame):
         except Exception as e:
             print(f"❌ Failed to load model: {e}")
             InfoBar.error(
-                title="Load Failed",
-                content=f"Cannot load model: {str(e)}",
+                title=tr("web.error_load_failed_title"),
+                content=tr("web.error_load_failed_content", error=str(e)),
                 orient=Qt.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,

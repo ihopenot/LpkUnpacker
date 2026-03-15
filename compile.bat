@@ -52,7 +52,7 @@ echo This may take several minutes. Please be patient...
 
 REM Main compilation command
 if "%RUN_PY_IS_CMD%"=="0" (
-    %RUN_PY% -m nuitka --standalone ^
+    %RUN_PY% -m nuitka --onefile ^
         --enable-plugin=pyqt5 ^
         --output-dir=build ^
         --windows-console-mode=%CONSOLE_MODE% ^
@@ -60,6 +60,7 @@ if "%RUN_PY_IS_CMD%"=="0" (
         --lto=no ^
         --show-progress ^
         --include-data-dir=./GUI/assets=GUI/assets ^
+        --include-data-dir=./Translations/locales=Translations/locales ^
         --include-data-dir=./Img=Img ^
         --windows-icon-from-ico=Img/icon.ico ^
         --nofollow-import-to=matplotlib,scipy,pandas,tkinter ^
@@ -77,5 +78,5 @@ if %ERRORLEVEL% neq 0 (
 
 echo.
 echo Compilation completed successfully!
-echo Executable can be found in the 'build' directory.
+echo Onefile executable can be found at 'build\LpkUnpackerGUI.exe'.
 echo.

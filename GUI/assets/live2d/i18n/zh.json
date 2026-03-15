@@ -55,6 +55,7 @@
     "section": "WebSocket 连接",
     "statusLabel": "连接状态",
     "statusDesc": "与主程序的实时通信状态",
+    "urlLabel": "WebSocket 地址",
     "disconnected": "断开",
     "connected": "已连接",
     "urlDesc": "实时通信地址",
