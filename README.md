@@ -1,5 +1,6 @@
 # LpkUnpacker
-[English](https://github.com/ihopenot/LpkUnpacker/blob/master/README_en.md)/中文
+
+[English](README_en.md) / 中文
 
 这个工具用来解包Live2dViewerEx的LPK文件
 
@@ -12,12 +13,27 @@
 
 ### 方法一：使用已编译的EXE文件（推荐）
 
-1. 从[Releases](https://github.com/Moeary/LpkUnpackerGUI/releases/tag/Gold)页面下载最新的LpkUnpackerGUI.exe文件
-2. 双击运行LpkUnpackerGUI.exe
-3. 在界面中选择要解包的LPK文件、对应的config.json文件（或者拖动也行）以及输出目录(默认输出为exe程序目录下output文件夹)
-4. 点击"Extract"按钮开始解包过程
+1. 从[Releases](https://github.com/ihopenot/LpkUnpacker/releases)页面下载最新的LpkUnpackerGUI.exe文件
 
-![Guide Animation](Img/Guide.gif)
+2. 双击运行LpkUnpackerGUI.exe
+
+3. 在界面中选择要解包的LPK文件、对应的config.json文件（或者拖动也行）以及输出目录(默认输出为exe程序目录下output文件夹)
+
+4. 点击"Extract"按钮开始解包过程,过程可以参考下面的动画演示：
+
+![Demo_Animation](Img/Guide.gif)
+
+5. Steam创意工坊文件批量处理(只演示查找,因为文件太多不演示批量解包部分):
+
+![Demo_Batch_Unpack](Img/Batch_Unpack.gif)
+
+6. 直接在软件内预览Live2D模型(软件渲染):
+
+![Demo_Software_Rendering](Img/Software_Rendering.gif)
+
+7. 直接在软件内预览Live2D模型(网页渲染):
+
+![Demo_Web_Rendering](Img/Web_Rendering.gif)
 
 ### 方法二：从源码运行
 
@@ -86,35 +102,13 @@ Steam创意工坊中的lpk文件通常需要config.json来解密
 
 ## 目前功能
 
-- [✓] 解包Lpk文件GUI界面
+- [√] LPK文件解包GUI界面
+- [√] i18n支持（英语和中文）
+- [√] 批量解包Steam创意工坊中的LPK文件
+- [√] 软件内直接预览Live2D文件（支持网页及软件两种渲染方式）
 
-## TOLIST
-- [ ] Wpk文件支持
-- [ ] 软件直接预览Live2d文件,By live2d-py库
-- [ ] 直接解包游戏live2d文件,By Unitypy/AssetStudio Cli
-- [ ] 分图层导出psd格式文件,方便魔改
+## 计划功能（To-Do List）
 
-<!-- ## 目录结构
-
-```
-.
-├── Core
-│   ├── lpk_loader.py
-│   └── utils.py
-├── LpkUnpacker.py
-├── README.md
-├── output              <==
-├── requirements.txt
-└── lpkfolder           <==
-    ├── target.lpk      <==
-    └── config.json     <==
-```
-
-## 使用方法
-
-1. clone这个仓库
-2. 在仓库目录下新建output和lpkfolder两个文件夹
-3. 把你的lpk和config.json丢到lpkfolder里去
-4. 在仓库目录下运行```python LpkUnpacker.py -c lpkfolder/config.json lpkfolder/target.lpk output```
-
-使用pycharm请自行搜索怎么添加python启动参数 -->
+- [ ] WPK文件格式支持
+- [ ] 直接解包游戏中的Live2D文件（借助 UnityPy / AssetStudio CLI）
+- [ ] 分图层导出PSD格式文件，方便二次魔改

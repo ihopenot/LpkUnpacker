@@ -1,5 +1,6 @@
 # LpkUnpacker
-English/[中文](https://github.com/ihopenot/LpkUnpacker/blob/master/README.md)
+
+English / [中文](README.md)
 
 This tool is designed to extract resources from Live2dExViewer's LPK files.
 
@@ -10,17 +11,42 @@ However, not all packs can be decrypted due to an unknown keygen/decryption algo
 
 ## Usage
 
-You can download the GUI executable from the [release](https://github.com/ihopenot/LpkUnpacker/releases) page, or run it directly from the source code.
+### Method 1: Using the Pre-compiled Executable (Recommended)
 
-![Guide Animation](Img/Guide.gif)
+1. Download the latest `LpkUnpackerGUI.exe` from the [Releases](https://github.com/ihopenot/LpkUnpacker/releases) page.
 
-### Requirements
-`python -m pip install -r requirements.txt`
+2. Double-click to run `LpkUnpackerGUI.exe`.
 
-### GUI
+3. Select the LPK file you want to unpack, the corresponding `config.json` file (or just drag and drop), and the output directory (defaults to the `output` folder in the executable's directory).
+
+4. Click the "Extract" button to begin unpacking. You can refer to the animation demonstration below:
+
+![Demo_Animation](Img/Guide.gif)
+
+5. Batch processing of Steam Workshop files (only showing the search process, as there are too many files for a batch unpack demo):
+
+![Demo_Batch_Unpack](Img/Batch_Unpack.gif)
+
+6. Direct Live2D model preview in software (Software Rendering):
+
+![Demo_Software_Rendering](Img/Software_Rendering.gif)
+
+7. Direct Live2D model preview in software (Web Rendering):
+
+![Demo_Web_Rendering](Img/Web_Rendering.gif)
+
+### Method 2: Run from Source Code
+
+If you prefer to run from source code, please follow these steps:
+
+1. Install requirements
 ```
-python LpkUnpackerGUI.py
+python -m pip install -r requirements.txt
 ```
+
+2. Run the program
+
+If you want to use the GUI version, run the following command:
 
 ### Cmdline
 ```
@@ -66,4 +92,16 @@ or
 `path/to/your/steam/steamapps/common/Live2DViewerEX/shared/workshop/...`
 
 
-To decrypt .wpk file, you need to unzip it with 7zip or other unzip tools, and you will get .lpk file and config.json. 
+To decrypt .wpk file, you need to unzip it with 7zip or other unzip tools, and you will get .lpk file and config.json.
+
+## Features
+
+- [x] GUI for unpacking LPK files
+- [x] Batch unpacking of LPK files from Steam Workshop
+- [x] Direct preview of Live2D files (implemented via both Web and Software rendering)
+
+## To-Do List
+
+- [ ] WPK file support
+- [ ] Directly unpack game Live2D files (via UnityPy/AssetStudio CLI)
+- [ ] Export PSD files separately by layers for easier modification 
