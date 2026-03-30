@@ -52,7 +52,7 @@ echo This may take several minutes. Please be patient...
 
 REM Main compilation command
 if "%RUN_PY_IS_CMD%"=="0" (
-    %RUN_PY% -m nuitka --onefile ^
+    %RUN_PY% -m nuitka --standalone ^
         --enable-plugin=pyqt5 ^
         --output-dir=build ^
         --windows-console-mode=%CONSOLE_MODE% ^
@@ -78,5 +78,5 @@ if %ERRORLEVEL% neq 0 (
 
 echo.
 echo Compilation completed successfully!
-echo Onefile executable can be found at 'build\LpkUnpackerGUI.exe'.
+echo Standalone directory can be found at 'build\LpkUnpackerGUI.dist'.
 echo.

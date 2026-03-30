@@ -42,8 +42,8 @@ jobs:
       
     - name: Verify build output
       run: |
-        if (-Not (Test-Path "build/LpkUnpackerGUI.exe")) {
-          Write-Error "Build failed: build/LpkUnpackerGUI.exe not found"
+        if (-Not (Test-Path "build/LpkUnpackerGUI.dist/LpkUnpackerGUI.exe")) {
+          Write-Error "Build failed: build/LpkUnpackerGUI.dist/LpkUnpackerGUI.exe not found"
           exit 1
         }
         Write-Host "Build successful!"
@@ -57,7 +57,7 @@ jobs:
           $version = "${{ github.sha }}".Substring(0, 7)
         }
         $zipName = "LpkUnpacker-$version-windows-x64.zip"
-        Compress-Archive -Path "build/LpkUnpackerGUI.exe" -DestinationPath $zipName -CompressionLevel Optimal
+        Compress-Archive -Path "build/LpkUnpackerGUI.dist/*" -DestinationPath $zipName -CompressionLevel Optimal
         echo "ZIP_NAME=$zipName" >> $env:GITHUB_OUTPUT
 
     - name: Upload artifact
